@@ -23,11 +23,9 @@ Draft 0.1, experimental. The spec is written to gather implementation experience
 | Path | What |
 |---|---|
 | [`SPEC.md`](SPEC.md) | The specification. |
-| [`test-vectors/`](test-vectors/) | A sample key pair, tokens, and what a conforming verifier reports for each. *Coming.* |
-| [`examples/`](examples/) | Minimal signers and a verifier in a few languages. *Coming.* |
+| [`test-vectors/`](test-vectors/) | Sample keys, 37 requests carrying tokens, and what a conforming verifier reports for each. |
+| [`examples/`](examples/) | Minting and verifying in Node (no dependencies) and Python. Both pass every test vector. |
 
 ## License
 
 The specification text is licensed under [CC BY 4.0](LICENSE). Example code is MIT.
-
-— Tom Rossi

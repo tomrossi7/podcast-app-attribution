@@ -85,7 +85,7 @@ Optional. When present a host MUST enforce them:
 
 | Claim | Label | Type | Value |
 |---|---|---|---|
-| `catu` | 312 | map | Restricts the token to a URL. A map from URL component (0 scheme, 1 host, 2 port, 3 path, 4 query) to a match rule; `{0: "value"}` means exact match. Issuers build it from the URL after removing the `CAT` parameter and normalizing as CTA-5007-B §4.6.10 describes. Hosts compare against the normalized request URL and, if that fails, against the request URL as received with only `CAT` removed, so an issuer that binds the URL verbatim still matches. A per-request token SHOULD exact-match scheme, host, path and query; port is optional. |
+| `catu` | 312 | map | Restricts the token to a URL. A map from URL component (0 scheme, 1 host, 2 port, 3 path, 4 query) to a match rule; `{0: "value"}` means exact match. Issuers build it from the URL after removing the `CAT` parameter and normalizing as CTA-5007-B §4.6.10 describes. Hosts compare against the normalized request URL and, if that fails, once more with the path and query exactly as received (with only `CAT` removed), so an issuer that binds them verbatim still matches. Scheme, host and port are always compared normalized. A per-request token SHOULD exact-match scheme, host, path and query; port is optional. |
 | `catm` | 313 | array of text | HTTP methods the token is good for, normally `["GET", "HEAD"]`. Case-sensitive. |
 | `aud` | 3 | text | The intended recipient. Normally the origin of the public request URL: scheme, lowercase ASCII hostname, the port only if non-default, no trailing slash (unlike `iss`, the scheme follows the media URL and may be `http` or `https`). A host MUST accept its own request origin, compared exactly before any redirect or internal rewrite, and MAY accept other values configured per issuer, such as a URN the issuer uses for all recipients. A host behind a proxy takes its origin from its own trusted proxy configuration, not from arbitrary client headers. |
 | `nbf` | 5 | integer | Not before, Unix seconds. |
@@ -133,7 +133,7 @@ Unless a host has configured another location for the issuer (below), the applic
 <iss>/.well-known/podcast-app-keys.json
 ```
 
-- Public keys only. Each key MUST carry `kid` (unique within the set), `kty`, `use: "sig"` and the curve parameters: `kty: "EC"`, `crv: "P-256"`, `x`, `y` for ES256; `kty: "OKP"`, `crv: "Ed25519"`, `x` for EdDSA. If a key carries `alg` it MUST match the token's algorithm (`"ES256"` or `"EdDSA"`); if it carries `key_ops` the array MUST include `"verify"`; otherwise verification fails.
+- Public keys only. Each key MUST carry `kid` (unique within the set), `kty`, `use: "sig"` and the curve parameters: `kty: "EC"`, `crv: "P-256"`, `x`, `y` for ES256; `kty: "OKP"`, `crv: "Ed25519"`, `x` for EdDSA. If a key carries `alg` it MUST match the token's algorithm (`"ES256"` or `"EdDSA"`); if it carries `key_ops` the array MUST include `"verify"`. A key that does not meet these requirements, or whose type does not fit the token's algorithm, is treated as absent.
 - The response SHOULD include `Cache-Control: max-age=<seconds>`. Hosts MUST use that lifetime, or one hour when none is given, and SHOULD refresh before it expires. If the cached set expires before a successful refresh, verification returns `key_unavailable` until a fresh set is available.
 - To rotate: publish the new key beside the old one, wait at least the lifetime advertised for the previous key set (or one hour), start signing with the new key, and remove the old key only after the last token signed with it has expired.
 
@@ -158,20 +158,22 @@ CTA-5007 leaves key exchange out of scope. A host MAY configure the key-set URL 
 
 - Append exactly one `CAT` parameter, using `?` or `&` as the URL requires, leaving the existing URL bytes and parameter order untouched. When looking for an existing or duplicate `CAT`, split the query on `&`, take the name as everything before the first `=`, percent-decode it once, and compare it case-sensitively with `CAT`.
 - If the URL already contains a `CAT` parameter, leave it alone.
-- Hosts MUST treat a request with more than one `CAT` parameter as unverified.
+- Hosts MUST treat a request with more than one `CAT` parameter as unverified (`malformed`).
 
 Appending a parameter can break URLs that are themselves signed by a third party. Applications SHOULD be able to turn attribution off for an origin that rejects the modified URL.
 
 ## Verification
 
-A host verifies a token by:
+A host verifies a token with the steps below, in this order. The first check that fails decides the reason, so two hosts report the same reason for the same token.
 
-1. Decoding the base64url value as one complete COSE_Sign1 with an embedded claims-map payload. Reject trailing data, duplicate map keys, an unsupported `alg`, a label present in both headers, and any `crit` header entry the verifier does not understand. Ignore unknown claims.
-2. Checking that every required claim is present with the type and checkable constraints above: `iss` syntax, `cti` at least 8 bytes, `catv` equal to `1`. Then, with `now` captured when the request arrived: `iat < exp ≤ iat + 86400`, `now < exp`, and `nbf ≤ now` when present, with no clock-skew leeway (CTA-5007-B requires this). Randomness of `cti` and the absence of listener identifiers cannot be checked from the bytes; they are issuer obligations.
-3. Selecting the key for (`iss`, `kid`) from the issuer's published set, or from the location configured for that issuer. Keys are only ever looked up under the token's own `iss`.
-4. Checking the signature, then `catu`, `catm` and `aud` when present, against the request as received.
+1. **Decode.** Decode the base64url value as one complete COSE_Sign1 with an embedded claims-map payload. Reject trailing data, duplicate map keys, an unsupported `alg`, a missing `kid`, a label present in both headers, and any `crit` header (label 2) entry the verifier does not understand. Hosts SHOULD also reject tokens that are not deterministically encoded. Ignore unknown claims. Failure: `malformed`.
+2. **Claims.** Check that every required claim is present with the type and checkable constraints above (`iss` syntax, `cti` at least 8 bytes, `catv` equal to `1`), that optional claims have the types above, and that `iat < exp ≤ iat + 86400`. Failure: `malformed`. Randomness of `cti` and the absence of listener identifiers cannot be checked from the bytes; they are issuer obligations.
+3. **Time.** With `now` captured when the request arrived, and no clock-skew leeway (CTA-5007-B requires this): `now < exp`, else `expired`; `nbf ≤ now` when present, else `not_yet_valid`.
+4. **Key.** Select the key for (`iss`, `kid`) from the issuer's cached set, published at the well-known path or at the location configured for that issuer. Keys are only ever looked up under the token's own `iss`. No usable key: `key_unavailable`.
+5. **Signature.** Failure: `bad_signature`.
+6. **Restrictions**, when present, against the request as received: `catu` (`url_mismatch`), then `catm` (`method_mismatch`), then `aud` (`audience_mismatch`). A `catu` using a match type the host does not support fails as `url_mismatch`.
 
-The outcome is a verified issuer, or *unverified* with one of these reasons: `malformed`, `expired`, `not_yet_valid`, `key_unavailable`, `bad_signature`, `url_mismatch`, `method_mismatch`, `audience_mismatch`.
+The outcome is a verified issuer, or *unverified* with one of the reasons above.
 
 What the host does next is its own policy. A host MAY serve an unverified request exactly as it does today, MAY record the verified issuer in its statistics, and MAY apply any other policy it chooses. This specification does not require any particular treatment of signed, unsigned or failed requests.
 
@@ -196,7 +198,7 @@ where each restriction field is `true` when present and matched, `null` when abs
 { "verified": false, "reason": "bad_signature" }
 ```
 
-using a reason from the list above. The check evaluates `catu`, `catm` and `aud` against the self-check request itself. An otherwise valid token bound to an episode URL therefore reports `url_mismatch`, which says nothing about its signature; an earlier failure (`expired`, `bad_signature`) is reported instead when it occurs first. To test a per-request token end to end, the issuer needs to be able to mint one bound to the self-check URL.
+using a reason from [Verification](#verification). The check evaluates `catu`, `catm` and `aud` against the self-check request itself. An otherwise valid token bound to an episode URL therefore reports `url_mismatch`, which says nothing about its signature; an earlier failure (`expired`, `bad_signature`) is reported instead when it occurs first. To test a per-request token end to end, the issuer needs to be able to mint one bound to the self-check URL.
 
 ## Security considerations
 

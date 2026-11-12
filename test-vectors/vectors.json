@@ -1,0 +1,515 @@
+{
+  "specification": "Verified App Attribution, Draft 0.1",
+  "issuer": "https://exampleplayer.com",
+  "keys": "keys.json",
+  "vectors": [
+    {
+      "name": "per-request",
+      "description": "The recommended pattern: bound to one URL with catu and to GET/HEAD with catm. Tag 18, kid in the protected header. The URL already has a query; CAT is appended after it.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?id=42&CAT=0oRMogEmBEcyMDI2LTExoFiHpwF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHULirfmKkmBE6dybW4M8q5gAZATYBGQE4pAChAGVodHRwcwGhAGxob3N0LmV4YW1wbGUDoQBxL3Nob3cvZXBpc29kZS5tcDMEoQBlaWQ9NDIZATmCY0dFVGRIRUFEWEDoxKBR6F23uG4dspI7cW3ylltcUh26ClZiPeTXDOcgR1rsY80xyqz53un3gYiC3iGOjSvVJ3UYBeYi8rGZOtTJ",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": true,
+        "catm": true,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'b8ab7e62a498113a7726d6e0cf2ae600', 310: 1, 312: {0: {0: \"https\"}, 1: {0: \"host.example\"}, 3: {0: \"/show/episode.mp3\"}, 4: {0: \"id=42\"}}, 313: [\"GET\", \"HEAD\"]} >>, h'e8c4a051e85db7b86e1db2923b716df2965b5c521dba0a56623de4d70ce720475aec63cd31caacf9dee9f7818882de218e8d2bd527751805e622f2b1993ad4c9'])"
+    },
+    {
+      "name": "session",
+      "description": "Only the required claims. Good for any URL on any host until it expires.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUGMDNO0ybd3-OJK0g128deEZATYBWEBZItGkhft2B58gLPRvy_gMv7II55imuMNj1EtW2UIHHtBN5sNBVREXJTwsz7I3GHXY6U_2QoKXlPwvhY86vXeh",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'630334ed326dddfe3892b4835dbc75e1', 310: 1} >>, h'5922d1a485fb76079f202cf46fcbf80cbfb208e798a6b8c363d44b56d942071ed04de6c341551117253c2ccfb2371875d8e94ff642829794fc2f858f3abd77a1'])"
+    },
+    {
+      "name": "session-head",
+      "description": "The same kind of token on a HEAD request.",
+      "method": "HEAD",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUDSPz2c4WZ0L3xOT8oV9h5IZATYBWED3lGl1zJxDhuCwxVcseB7YbHfXFNI2l9z12ej2OtOWLxXAnIoa_7i_b6kJA3e8EHsJuP70UEzodINnt1RSNNpm",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'348fcf6738599d0bdf1393f2857d8792', 310: 1} >>, h'f7946975cc9c4386e0b0c5572c781ed86c77d714d23697dcf5d9e8f63ad3962f15c09c8a1affb8bf6fa9090377bc107b09b8fef4504ce8748367b7545234da66'])"
+    },
+    {
+      "name": "lifetime-24-hours",
+      "description": "The longest lifetime allowed (exp = iat + 86400), checked one second before it expires.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtLI4AGGmtJ0gAHUBQaYuxu_nXHtho34g_BmJsZATYBWEATqp2HNoAeVtFoYhLwovhnt_zmsfHy2F6WVudqYZaHuHJo6TLriaD2068zQ6TmEffsR7o9SOOqisvoJB5PCydw",
+      "now": 1800086399,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800086400,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800086400, 6: 1800000000, 7: h'141a62ec6efe75c7b61a37e20fc1989b', 310: 1} >>, h'13aa9d8736801e56d1686212f0a2f867b7fce6b1f1f2d85e9656e76a619687b87268e932eb89a0f6d3af3343a4e611f7ec47ba3d48e3aa8acbe8241e4f0b2770'])"
+    },
+    {
+      "name": "kid-unprotected",
+      "description": "kid in the unprotected header, CWT tag 61 around COSE tag 18, and nbf equal to iat.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=2D3ShEOhASahBEcyMDI2LTExWEWmAXgZaHR0cHM6Ly9leGFtcGxlcGxheWVyLmNvbQQaa0nTLAYaa0nSAAdQv-rn16TZkRsnHKq1A_HvThkBNgEFGmtJ0gBYQFdDWiQRLhGWngHXAlk2aJrB8zPR3uXObLmVoM391jrOI7CNygEmMbIImZADbVNCE-Rkhr0KaIufhYasCx-qRB0",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "61(18([<< {1: -7} >>, {4: h'323032362d3131'}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'bfeae7d7a4d9911b271caab503f1ef4e', 310: 1, 5: 1800000000} >>, h'57435a24112e11969e01d7025936689ac1f333d1dee5ce6cb995a0cdfdd63ace23b08dca012631b2089990036d534213e46486bd0a688b9f8586ac0b1faa441d']))"
+    },
+    {
+      "name": "untagged-padded",
+      "description": "An untagged COSE_Sign1, base64url-encoded with \"=\" padding.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=hEyiASYERzIwMjYtMTGgWD-lAXgZaHR0cHM6Ly9leGFtcGxlcGxheWVyLmNvbQQaa0nTLAYaa0nSAAdQv6zZvW7EloD-YDFEhfVZOBkBNgFYQN1ZFcR6V04XEUnYpv4LgUMeInp_OHNhOcfH7KNwtgEKUcQkNtRZvpkn7GX5Yvwq-r_yYe2HMuAdKd0bissJZJk=",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "[<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'bfacd9bd6ec49680fe60314485f55938', 310: 1} >>, h'dd5915c47a574e171149d8a6fe0b81431e227a7f38736139c7c7eca370b6010a51c42436d459be9927ec65f962fc2afabff261ed8732e01d29dd1b8acb096499']"
+    },
+    {
+      "name": "aud-origin",
+      "description": "aud names the origin the request arrived on.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhVpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUJbWX9ceVOUaxNMEvsGPVaoZATYBA3RodHRwczovL2hvc3QuZXhhbXBsZVhAF7w4bu1fNZ7Tw-lvhScUhVUzgtbL0D2cLB0SAiBkOVKM4DMZ_ETYj3oGiHwagu_97bC9qKhgKhvs4k4TRN1Gbg",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": true
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'96d65fd71e54e51ac4d304bec18f55aa', 310: 1, 3: \"https://host.example\"} >>, h'17bc386eed5f359ed3c3e96f85271485553382d6cbd03d9c2c1d1202206439528ce03319fc44d88f7a06887c1a82effdedb0bda8a8602a1bece24e1344dd466e'])"
+    },
+    {
+      "name": "aud-configured",
+      "description": "aud is a value the host has configured as acceptable for this issuer.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhbpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUN7wTDhzThj189whn8o7LqYZATYBA3gZdXJuOmV4YW1wbGU6cG9kY2FzdC1ob3N0c1hAo8bpM_9a8v44t0ELRUFyklJ_-t93o0yJzF8834po2oX1eKLw5zp2t03zCo8vMxXinmQXF-sScqv_PaIXxLY5cQ",
+      "now": 1800000060,
+      "accepted_audiences": [
+        "urn:example:podcast-hosts"
+      ],
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": true
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'def04c38734e18f5f3dc219fca3b2ea6', 310: 1, 3: \"urn:example:podcast-hosts\"} >>, h'a3c6e933ff5af2fe38b7410b45417292527ffadf77a34c89cc5f3cdf8a68da85f578a2f0e73a76b74df30a8f2f3315e29e641717eb1272abff3da217c4b63971'])"
+    },
+    {
+      "name": "catu-normalized",
+      "description": "The request URL is matched after normalization: scheme and host lowercased, default port removed, dot segments resolved, \"%7E\" decoded to \"~\". The catu port component is the empty string.",
+      "method": "GET",
+      "url": "HTTPS://Host.Example:443/show/extra/../%7Eepisode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFh2pgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUOLCO-8oZF67dN5Oq3Vdp2sZATYBGQE4pAChAGVodHRwcwGhAGxob3N0LmV4YW1wbGUCoQBgA6EAci9zaG93L35lcGlzb2RlLm1wM1hA6S1KCqMAGX_moqK1ucXyK4XG0B5ousrOiX1zKwJ46O5qHMydUgqFdh014okdNKIQ-BzInhYpWBfvAAz5amz_bw",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": true,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'e2c23bef28645ebb74de4eab755da76b', 310: 1, 312: {0: {0: \"https\"}, 1: {0: \"host.example\"}, 2: {0: \"\"}, 3: {0: \"/show/~episode.mp3\"}}} >>, h'e92d4a0aa300197fe6a2a2b5b9c5f22b85c6d01e68bacace897d732b0278e8ee6a1ccc9d520a85761d35e2891d34a210f81cc89e16295817ef000cf96a6cff6f'])"
+    },
+    {
+      "name": "catu-verbatim",
+      "description": "The issuer bound the query exactly as written (\"q=%7e\") rather than normalized (\"q=~\"). The normalized comparison fails; the second comparison, with the path and query as received, succeeds.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?q=%7e&CAT=0oRMogEmBEcyMDI2LTExoFh6pgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUMRN-aD55-4igL5IZ2hBLrYZATYBGQE4pAChAGVodHRwcwGhAGxob3N0LmV4YW1wbGUDoQBxL3Nob3cvZXBpc29kZS5tcDMEoQBlcT0lN2VYQIwFbwWL4nwzmyficS3UVExmCMh0VBqu3_NXUloYgigfmmF_SH2JRAzNR0phMO7LRpseAny6JlbMH2s174ERsBM",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": true,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'c44df9a0f9e7ee2280be486768412eb6', 310: 1, 312: {0: {0: \"https\"}, 1: {0: \"host.example\"}, 3: {0: \"/show/episode.mp3\"}, 4: {0: \"q=%7e\"}}} >>, h'8c056f058be27c339b27e2712dd4544c6608c874541aaedff357525a1882281f9a617f487d89440ccd474a6130eecb469b1e027cba2656cc1f6b35ef8111b013'])"
+    },
+    {
+      "name": "catu-prefix",
+      "description": "catu restricts the host exactly and the path by prefix, so the token covers a whole show.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhdpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUGnzcFHJ-9jbXCjX8mQXwZ4ZATYBGQE4ogGhAGxob3N0LmV4YW1wbGUDoQFmL3Nob3cvWEBiW0o7RV8JTObbcZu-44xccN-4W9GePLWKbLsmi9uIcQvIqMTe8H_S4iZn6h09HEWuJgaCi5nWcNCWfdedrS9b",
+      "now": 1800000060,
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11",
+        "exp": 1800000300,
+        "catu": true,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'69f37051c9fbd8db5c28d7f26417c19e', 310: 1, 312: {1: {0: \"host.example\"}, 3: {1: \"/show/\"}}} >>, h'625b4a3b455f094ce6db719bbee38c5c70dfb85bd19e3cb58a6cbb268bdb88710bc8a8c4def07fd2e22667ea1d3d1c45ae2606828b99d670d0967dd79dad2f5b'])"
+    },
+    {
+      "name": "eddsa",
+      "description": "Signed with Ed25519 (alg -8). Hosts MAY support EdDSA; one that does not reports \"malformed\".",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRPogEnBEoyMDI2LTExLWVkoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUHaNTNmrZyLE4DZBZ2c3lhkZATYBWEDf8s7fuIKsoUXwbZMcJDxYbNxN0lS-kMGgbRA-5oYcbezZ_LSg0VMsnPeumBZmy3b25YV8D55KxacwPn02A2UN",
+      "now": 1800000060,
+      "requires": "EdDSA",
+      "expected": {
+        "verified": true,
+        "iss": "https://exampleplayer.com",
+        "kid": "2026-11-ed",
+        "exp": 1800000300,
+        "catu": null,
+        "catm": null,
+        "aud": null
+      },
+      "diagnostic": "18([<< {1: -8, 4: h'323032362d31312d6564'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'768d4cd9ab6722c4e036416767379619', 310: 1} >>, h'dff2cedfb882aca145f06d931c243c586cdc4dd254be90c1a06d103ee6861c6decd9fcb4a0d1532c9cf7ae981666cb76f6e5857c0f9e4ac5a7303e7d3603650d'])"
+    },
+    {
+      "name": "expired",
+      "description": "now equals exp. A token is valid only while now < exp.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUKzAbgSHr913hMFsZ9I1fLoZATYBWEAZU_obDwoCLBVzKFCDPwcl9t36qfSz33_q6AWUSynG3Z0yhIL5X04RE_FRzd6JI4feJ6-rxq4YPs67B51Lr_D2",
+      "now": 1800000300,
+      "expected": {
+        "verified": false,
+        "reason": "expired"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'acc06e0487afdd7784c16c67d2357cba', 310: 1} >>, h'1953fa1b0f0a022c15732850833f0725f6ddfaa9f4b3df7feae805944b29c6dd9d328482f95f4e1113f151cdde892387de27afabc6ae183ecebb079d4baff0f6'])"
+    },
+    {
+      "name": "not-yet-valid",
+      "description": "nbf is one second in the future. No clock-skew leeway is allowed.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhFpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUBVdly4F-K38VKlxcrMSpGIZATYBBRprSdI9WECRifDUplNxi9icjiZzwGmq0DkObxmxE0-K993fUVY6grhcKdkSr-5l8tXm-DKJW43rNulZO6iQf9r5nZGgBDJl",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "not_yet_valid"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'155d972e05f8adfc54a97172b312a462', 310: 1, 5: 1800000061} >>, h'9189f0d4a653718bd89c8e2673c069aad0390e6f19b1134f8af7dddf51563a82b85c29d912afee65f2d5e6f832895b8deb36e9593ba8907fdaf99d91a0043265'])"
+    },
+    {
+      "name": "lifetime-too-long",
+      "description": "exp is more than 24 hours after iat.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtLI4EGGmtJ0gAHUO-gAiNlLKXH83tiRS3t3XkZATYBWEDgvXc_H_mj7aewkWbH2pv_9km9S3hjOUnxdBQQQJ06f_UvCVGN3lXldmvW0Z3RUWKw3LaBYqF8ys37pzzMA4A3",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800086401, 6: 1800000000, 7: h'efa00223652ca5c7f37b62452deddd79', 310: 1} >>, h'e0bd773f1ff9a3eda7b09166c7da9bfff649bd4b78633949f1741410409d3a7ff52f09518dde55e5766bd6d19dd15162b0dcb68162a17ccacdfba73ccc038037'])"
+    },
+    {
+      "name": "bad-signature",
+      "description": "A valid token with the last bit of its signature flipped.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUL9f4p9CbuPIos7Im8xRuFAZATYBWEBp3SU98vJ6v-D2CAbAPUbGLrEh_x5As5i1Q4lmOz1tYGSd5gjqc-R9Q7ZlrkUOczEq97uLEO79Eifo_PTjgja5",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "bad_signature"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'bf5fe29f426ee3c8a2cec89bcc51b850', 310: 1} >>, h'69dd253df2f27abfe0f60806c03d46c62eb121ff1e40b398b54389663b3d6d60649de608ea73e47d43b665ae450e73312af7bb8b10eefd1227e8fcf4e38236b9'])"
+    },
+    {
+      "name": "wrong-key",
+      "description": "Signed by a key that is not the published one, under the published kid.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUI9jA15eE_Jd9QkR2e_xwBIZATYBWEBOSewLv8BYjpfqM4cKILLCT52T78n11I1arPsr3DWyefuD0AU9MGai8B8N4yThQCEc77VMFwknenREyvl16FmC",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "bad_signature"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'8f63035e5e13f25df50911d9eff1c012', 310: 1} >>, h'4e49ec0bbfc0588e97ea33870a20b2c24f9d93efc9f5d48d5aacfb2bdc35b279fb83d0053d3066a2f01f0de324e140211cefb54c1709277a7444caf975e85982'])"
+    },
+    {
+      "name": "unknown-kid",
+      "description": "The kid is not in the issuer's key set.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDIwLTAxoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUHNjzL5yRatOwwbOIL5IzqIZATYBWEAMCMYj2iS4pBfHW3jBzwcpAZOG2N0iri_C6D-Tt-uzwWp4UHNiaST-WlSPZXmGmbyNwJpRZFM_xxYzsAE2Ljq7",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "key_unavailable"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032302d3031'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'7363ccbe7245ab4ec306ce20be48cea2', 310: 1} >>, h'0c08c623da24b8a417c75b78c1cf0729019386d8dd22ae2fc2e83f93b7ebb3c16a785073626924fe5a548f65798699bc8dc09a5164533fc71633b001362e3abb'])"
+    },
+    {
+      "name": "unknown-issuer",
+      "description": "A well-formed token from an issuer the host has no cached keys for. The host answers without fetching.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg8pQF3aHR0cHM6Ly91bmtub3duLmV4YW1wbGUEGmtJ0ywGGmtJ0gAHUHJjXijZtjjnUDjKKeQlMhAZATYBWEDJROB0B0Bl6mflcsaAt4hsVYTcmoAlJZQeJCP5mDoLSJH-M3ON0kpzXzmrMQogMUlJTdAddgnxp4ewzs8Kk5ir",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "key_unavailable"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://unknown.example\", 4: 1800000300, 6: 1800000000, 7: h'72635e28d9b638e75038ca29e4253210', 310: 1} >>, h'c944e074074065ea67e572c680b7886c5584dc9a802525941e2423f9983a0b4891fe33738dd24a735f39ab310a203149494dd01d7609f1a787b0cecf0a9398ab'])"
+    },
+    {
+      "name": "kid-names-wrong-key-type",
+      "description": "An ES256 token whose kid names the Ed25519 key. A key that does not fit the token's algorithm is treated as absent.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRPogEmBEoyMDI2LTExLWVkoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUK9qUwdFFgjhcVOuYRBCpPEZATYBWEDHMBbV9SAARJtrLM0Rq4T3HF4ZQu3RoQ66EN68QEtYCBf0pdtoCpYjzxf-ZkmPlUgHCrNTLDzkgQxawl94RPVW",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "key_unavailable"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d31312d6564'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'af6a5307451608e17153ae611042a4f1', 310: 1} >>, h'c73016d5f52000449b6b2ccd11ab84f71c5e1942edd1a10eba10debc404b580817f4a5db680a9623cf17fe66498f9548070ab3532c3ce4810c5ac25f7844f556'])"
+    },
+    {
+      "name": "expired-before-signature",
+      "description": "Expired and badly signed. Claims and time are checked before the key is looked up, so the reason is \"expired\".",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUN-MKJQ6gjAJ00u7y9mIQBAZATYBWECybOW06GBqvEdyGAGxSBnTvBrQNAjTLgUdqGqon9jTPGUWShRADBCvPodH-_fByxcPI0qPfkqfxTMJSwJBnKzV",
+      "now": 1800000600,
+      "expected": {
+        "verified": false,
+        "reason": "expired"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'df8c28943a823009d34bbbcbd9884010', 310: 1} >>, h'b26ce5b4e8606abc47721801b14819d3bc1ad03408d32e051da86aa89fd8d33c65164a14400c10af3e8747fbf7c1cb170f234a8f7e4a9fc533094b02419cacd5'])"
+    },
+    {
+      "name": "url-mismatch",
+      "description": "catu binds the token to a different episode.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhzpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUFa2ReBdgDTIsfyOuJRN61gZATYBGQE4pAChAGVodHRwcwGhAGxob3N0LmV4YW1wbGUDoQBvL3Nob3cvb3RoZXIubXAzBKEAYFhA21-J-VScvke9O7BEe41sUmLjLv13j26QPnmFgTWZlFRjZLweEQ0lTtfOolsJ-MIZPkjIOXbPi-tml6HcH9AvAg",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "url_mismatch"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'56b645e05d8034c8b1fc8eb8944deb58', 310: 1, 312: {0: {0: \"https\"}, 1: {0: \"host.example\"}, 3: {0: \"/show/other.mp3\"}, 4: {0: \"\"}}} >>, h'db5f89f9549cbe47bd3bb0447b8d6c5262e32efd778f6e903e798581359994546364bc1e110d254ed7cea25b09f8c2193e48c83976cf8beb6697a1dc1fd02f02'])"
+    },
+    {
+      "name": "url-mismatch-port-443",
+      "description": "catu asks for port \"443\". Normalization removes the default port, so the port component is the empty string and this never matches. The as-received fallback covers path and query only.",
+      "method": "GET",
+      "url": "https://host.example:443/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhTpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUPC0cUf5_JmPiuHIr3KcATEZATYBGQE4ogChAGVodHRwcwKhAGM0NDNYQMS7CCl1QcDhzoFtZnPdbukBXBNXglnh4DicNz57-E6PPUU57nZXSaP7n7OZBXYis5wl9UkCeawTn_kxCAxBtYc",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "url_mismatch"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'f0b47147f9fc998f8ae1c8af729c0131', 310: 1, 312: {0: {0: \"https\"}, 2: {0: \"443\"}}} >>, h'c4bb08297541c0e1ce816d6673dd6ee9015c13578259e1e0389c373e7bf84e8f3d4539ee765749a3fb9fb399057622b39c25f5490279ac139ff931080c41b587'])"
+    },
+    {
+      "name": "method-mismatch",
+      "description": "catm allows GET and HEAD; the request is a POST.",
+      "method": "POST",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhMpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUHCyPmzGojlIdXHizp086eMZATYBGQE5gmNHRVRkSEVBRFhAlElIIBTfRYkHm3JBVcTzFWAAqaHQy_PTNarfNBFuDPIKP3B4shGhcgDnG_MHJSCIEcqyxrf1PIpwJbKLlGkJyA",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "method_mismatch"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'70b23e6cc6a239487571e2ce9d3ce9e3', 310: 1, 313: [\"GET\", \"HEAD\"]} >>, h'9449482014df4589079b724155c4f3156000a9a1d0cbf3d335aadf34116e0cf20a3f7078b211a17200e71bf30725208811cab2c6b7f53c8a7025b28b946909c8'])"
+    },
+    {
+      "name": "audience-mismatch",
+      "description": "aud names another host.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhWpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUBdopA8ds0wZ0w9iBxTtf6AZATYBA3VodHRwczovL290aGVyLmV4YW1wbGVYQKVbGbQ_eYMv-ZkLdD_V2AIc6Jbsj1TmlJFzYbHARuPz94D7WZ5AeCLhyz_BfChRx6_TIsrs6ia7MHM6BHfWGIQ",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "audience_mismatch"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'1768a40f1db34c19d30f620714ed7fa0', 310: 1, 3: \"https://other.example\"} >>, h'a55b19b43f79832ff9990b743fd5d8021ce896ec8f54e694917361b1c046e3f3f780fb599e407822e1cb3fc17c2851c7afd322caecea26bb30733a0477d61884'])"
+    },
+    {
+      "name": "missing-cti",
+      "description": "A required claim is absent.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFgtpAF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAZATYBWEBAavCTTg0WqfiD7ONdRGC4WYMpeDZ-z5YlrB1A-r8fs26Un2daGGJ_r8i1TTNZcYjtA2vEGNCZ-vFfTpGPDDFN",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 310: 1} >>, h'406af0934e0d16a9f883ece35d4460b859832978367ecf9625ac1d40fabf1fb36e949f675a18627fafc8b54d33597188ed036bc418d099faf15f4e918f0c314d'])"
+    },
+    {
+      "name": "short-cti",
+      "description": "cti is 4 bytes; at least 8 are required.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFgzpQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHRBYcxLwZATYBWEDS_wp-uNe7jA5RokiGuftdaWZYn-YR4N78KwneZ7WsLPDPCuVnneAIhl5g6hS-HG53LVE1UkBsFd1z-akF-5kP",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'161cc4bc', 310: 1} >>, h'd2ff0a7eb8d7bb8c0e51a24886b9fb5d6966589fe611e0defc2b09de67b5ac2cf0cf0ae5679de008865e60ea14be1c6e772d513552406c15dd73f9a905fb990f'])"
+    },
+    {
+      "name": "catv-2",
+      "description": "An unsupported CAT version.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUJjJDfZ_9NoK1yINSJ_GU_MZATYCWEBuT4L3d0H2uFLCcvo4YhsRAqPhKkZGKKgA2rbJBf6vymm2h1caQewbgXgTfxWQZYg-9fCBp3LEyE1EFkCI1ejJ",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'98c90df67ff4da0ad7220d489fc653f3', 310: 2} >>, h'6e4f82f77741f6b852c272fa38621b1102a3e12a464628a800dab6c905feafca69b687571a41ec1b8178137f159065883ef5f081a772c4c84d44164088d5e8c9'])"
+    },
+    {
+      "name": "iss-with-path",
+      "description": "iss has a trailing slash, so it is not a bare origin.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhApQF4Gmh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20vBBprSdMsBhprSdIAB1AZanTPov3y3YA4Mqb2lMg9GQE2AVhA5fWSgBrkv7lkh4GPhQaZmUfxYPTPSw4En6Dv2ddcW9bH-z-MTH_zd_UEUoo52ouSHrvRQN1GvBlywoQa1MXomw",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com/\", 4: 1800000300, 6: 1800000000, 7: h'196a74cfa2fdf2dd803832a6f694c83d', 310: 1} >>, h'e5f592801ae4bfb96487818f8506999947f160f4cf4b0e049fa0efd9d75c5bd6c7fb3f8c4c7ff377f504528a39da8b921ebbd140dd46bc1972c2841ad4c5e89b'])"
+    },
+    {
+      "name": "iss-not-https",
+      "description": "iss uses http.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg-pQF4GGh0dHA6Ly9leGFtcGxlcGxheWVyLmNvbQQaa0nTLAYaa0nSAAdQw4nr-SPwYgvrsS4e2UpVgBkBNgFYQHMN2a4p-eC7tKBmJaMRqG78rsQcX17nxBnGa4HJcXZ-DcY2GUcMtc7GF7FOM5FEX2G0JXALOBMCE5e0t44lBP8",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"http://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'c389ebf923f0620bebb12e1ed94a5580', 310: 1} >>, h'730dd9ae29f9e0bbb4a06625a311a86efcaec41c5f5ee7c419c66b81c971767e0dc63619470cb5cec617b14e3391445f61b425700b3813021397b4b78e2504ff'])"
+    },
+    {
+      "name": "unsupported-alg",
+      "description": "The protected header says ES384 (alg -35).",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRNogE4IgRHMjAyNi0xMaBYP6UBeBlodHRwczovL2V4YW1wbGVwbGF5ZXIuY29tBBprSdMsBhprSdIAB1AocioVIDblBGoDVhI65RRpGQE2AVhA_uINvNbV4s02Yci_dWV7sPKmXgYHUi0cVoyXvStQPnO9prfQjvO7xejJBRAH2_LWBml25HRC0PzK9BDuJs_zWg",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -35, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'28722a152036e5046a0356123ae51469', 310: 1} >>, h'fee20dbcd6d5e2cd3661c8bf75657bb0f2a65e0607522d1c568c97bd2b503e73bda6b7d08ef3bbc5e8c9051007dbf2d6066976e47442d0fccaf410ee26cff35a'])"
+    },
+    {
+      "name": "kid-in-both-headers",
+      "description": "kid appears in the protected and the unprotected header.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoQRHMjAyNi0xMVg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUPgU15gTxtJFT-hNMMqXIRIZATYBWEDIW6OTVTzSJVtn3W5eCHiXnt8hspAOOlhZsNZTnJWIl8BvcIDueR7h2fGfAgpKyhn7IF6mprBSo2IGkKfx2NsU",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {4: h'323032362d3131'}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'f814d79813c6d2454fe84d30ca972112', 310: 1} >>, h'c85ba393553cd2255b67dd6e5e0878979edf21b2900e3a5859b0d6539c958897c06f7080ee791ee1d9f19f020a4aca19fb205ea6a6b052a3620690a7f1d8db14'])"
+    },
+    {
+      "name": "unknown-critical-header",
+      "description": "The crit header lists an extension the verifier does not understand.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRYGaQBJgRHMjAyNi0xMQKBOgABEW86AAERbwGgWD-lAXgZaHR0cHM6Ly9leGFtcGxlcGxheWVyLmNvbQQaa0nTLAYaa0nSAAdQqvHYi_3vYZiOeUGCNe9AWhkBNgFYQKeWLkB6kQ2AQF_x9rdnxCt_f7IO1dkTiTTMmmrzMyAzpwvTHhv7dBe8f4wQNtL8DjDr02ApdGiw5nz_Tr2r6dk",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131', 2: [-70000], -70000: 1} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'aaf1d88bfdef61988e79418235ef405a', 310: 1} >>, h'a7962e407a910d80405ff1f6b767c42b7f7fb20ed5d9138934cc9a6af3332033a70bd31e1bfb7417bc7f8c1036d2fc0e30ebd360297468b0e67cff4ebdabe9d9'])"
+    },
+    {
+      "name": "duplicate-claim",
+      "description": "The claims map contains iss twice. The signature is valid; the token is still rejected.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFhWpgF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUFJ5AJJAuGnGral9jTm6r0QZATYBAXVodHRwczovL290aGVyLmV4YW1wbGVYQE6xaGD4LGuZWaNbLb7zgZqBioeYZ8RhUFKqCNV9lTH8RxrHmdTVcKKfMAcAvRct55mqeNImhLMZYkBZquSiS1k",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, h'a601781968747470733a2f2f6578616d706c65706c617965722e636f6d041a6b49d32c061a6b49d20007505279009240b869c6ada97d8d39baaf4419013601017568747470733a2f2f6f746865722e6578616d706c65', h'4eb16860f82c6b9959a35b2dbef3819a818a879867c4615052aa08d57d9531fc471ac799d4d570a29f300700bd172de799aa78d22684b319624059aae4a24b59'])"
+    },
+    {
+      "name": "trailing-data",
+      "description": "A valid token followed by one extra byte.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUK7FQr2LcfiT6I9XpOoB91UZATYBWEBe78np0_l00ybaiyPF3R5xXiKeAlGuhBSkyyi2MMBI-y4141O0Q4UDouAdGZL55bTEiCHrqziElLUIO9PFiFjnAA",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": null
+    },
+    {
+      "name": "not-base64url",
+      "description": "The CAT value is not base64url.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=not*a*token",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": null
+    },
+    {
+      "name": "two-cat-parameters",
+      "description": "Two CAT parameters, each a valid token. More than one is ambiguous, so the request is unverified.",
+      "method": "GET",
+      "url": "https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUNof-eXR1BbCjzGt_2QwT4kZATYBWECR171IZZY3k_rJQhrNbcO5UE56UfjoXABUcjy5rZjzE_aQ_zzPwb185dXfxAcwj2-B80r78De0uCHGM9Qxw-6k&CAT=0oRMogEmBEcyMDI2LTExoFg_pQF4GWh0dHBzOi8vZXhhbXBsZXBsYXllci5jb20EGmtJ0ywGGmtJ0gAHUFtmXdQLLS7VnbegG1rWrU0ZATYBWEDmFqoCYle9P8Fz_A0qvcgldoRJAinvuxcM7g1LYZ3eSUZirBs0kqM_8DZY-iirkNQY-KgooGz6Madk1lY065ui",
+      "now": 1800000060,
+      "expected": {
+        "verified": false,
+        "reason": "malformed"
+      },
+      "diagnostic": "18([<< {1: -7, 4: h'323032362d3131'} >>, {}, << {1: \"https://exampleplayer.com\", 4: 1800000300, 6: 1800000000, 7: h'da1ff9e5d1d416c28f31adff64304f89', 310: 1} >>, h'91d7bd4865963793fac9421acd6dc3b9504e7a51f8e85c0054723cb9ad98f313f690ff3ccfc1bd7ce5d5dfc407308f6f81f34afbf037b4b821c633d431c3eea4'])"
+    }
+  ]
+}

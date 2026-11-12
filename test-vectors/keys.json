@@ -1,0 +1,19 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "x": "tj5fwv4Hwn9hzhqzqyRCN2B0cipjgQH15z19Pqogrbs",
+      "y": "P3JT4Yn_nwSVxijIqVukswOmejdGzbcg60VdMc-pFSQ",
+      "crv": "P-256",
+      "use": "sig",
+      "kid": "2026-11"
+    },
+    {
+      "crv": "Ed25519",
+      "x": "bnY0T3XnKu9pnSPG_FoF3QBFVAZA3GE-hJjFayTD-Hg",
+      "kty": "OKP",
+      "use": "sig",
+      "kid": "2026-11-ed"
+    }
+  ]
+}
