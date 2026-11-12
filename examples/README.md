@@ -1,6 +1,6 @@
 # Examples
 
-Two small implementations of both sides: minting a token (what an application does) and verifying one (what a host does). Both pass every [test vector](../test-vectors/), and each verifies tokens minted by the other.
+Small implementations of both sides: minting a token (what an application does) and verifying one (what a host does). Each passes every [test vector](../test-vectors/) and verifies tokens minted by the others.
 
 They are written to be read. Neither fetches or caches keys; a real host does that in the background, as the [specification](../SPEC.md#publishing-keys) describes.
 
@@ -27,6 +27,19 @@ node examples/node/verify.mjs test-vectors/keys.json https://exampleplayer.com '
 node examples/node/run-vectors.mjs
 ```
 
+## Ruby
+
+Standard library only (`openssl`). Ruby 3.1 or later.
+
+| File | What |
+|---|---|
+| [`ruby/attribution.rb`](ruby/attribution.rb) | `Attribution.mint`, `.attach` and `.verify`, including building OpenSSL keys from JWKs. |
+| [`ruby/cbor.rb`](ruby/cbor.rb) | The same strict CBOR subset as the Node example. |
+
+```sh
+ruby examples/ruby/run_vectors.rb
+```
+
 ## Python
 
 The same thing with libraries: [`cbor2`](https://pypi.org/project/cbor2/) for CBOR and [`cryptography`](https://pypi.org/project/cryptography/) for signatures. Python 3.10 or later.
@@ -49,6 +62,6 @@ uv run examples/python/run_vectors.py
 - **General-purpose CBOR decoders are lenient.** Many accept trailing data and duplicate map keys, which the specification requires a host to reject. The Python example shows one way to make a lenient decoder strict.
 - **Check types exactly.** In several languages `true == 1`; a claim of `true` is not `catv: 1`.
 - **Handle the request URL as a string.** URL classes normalize as they parse, and the as-received path and query matter for `catu`.
-- **`catu` match types.** Both examples support exact, prefix, suffix, contains and SHA-256. Regular-expression and SHA-512/256 matches are reported as `url_mismatch`.
+- **`catu` match types.** The examples support exact, prefix, suffix, contains and SHA-256. Regular-expression and SHA-512/256 matches are reported as `url_mismatch`.
 
 Code here is MIT licensed (see [LICENSE](LICENSE)).

@@ -24,7 +24,7 @@ Draft 0.1, experimental. The spec is written to gather implementation experience
 |---|---|
 | [`SPEC.md`](SPEC.md) | The specification. |
 | [`test-vectors/`](test-vectors/) | Sample keys, 37 requests carrying tokens, and what a conforming verifier reports for each. |
-| [`examples/`](examples/) | Minting and verifying in Node (no dependencies) and Python. Both pass every test vector. |
+| [`examples/`](examples/) | Minting and verifying in Node, Ruby and Python. Each passes every test vector. |
 
 ## License
 
