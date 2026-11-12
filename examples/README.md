@@ -1,8 +1,53 @@
 # Examples
 
-Small implementations of both sides: minting a token (what an application does) and verifying one (what a host does). Each passes every [test vector](../test-vectors/) and verifies tokens minted by the others.
+Small implementations, written to be read.
 
-They are written to be read. Neither fetches or caches keys; a real host does that in the background, as the [specification](../SPEC.md#publishing-keys) describes.
+| | Mint (application side) | Verify (host side) |
+|---|---|---|
+| [Swift](#swift) | ✓ | |
+| [Kotlin](#kotlin) | ✓ | |
+| [Node](#node) | ✓ | ✓ |
+| [Ruby](#ruby) | ✓ | ✓ |
+| [Python](#python) | ✓ | ✓ |
+
+Every verifier passes every [test vector](../test-vectors/), and tokens minted by each example verify with the others.
+
+None of them fetches or caches keys; a real host does that in the background, as the [specification](../SPEC.md#publishing-keys) describes.
+
+## Swift
+
+For iOS and macOS apps. CryptoKit only: [`Attribution.swift`](swift/Sources/Attribution/Attribution.swift) is one file to drop into an app.
+
+```swift
+let token = try Attribution.mint(key: key, kid: "2026-11", iss: "https://exampleplayer.com", url: url)
+let asset = AVURLAsset(url: URL(string: Attribution.attach(token, to: url))!)
+```
+
+The package around it exists so the example can be built and run from the command line, including on Linux, where [swift-crypto](https://github.com/apple/swift-crypto) stands in for CryptoKit:
+
+```sh
+cd examples/swift
+swift run mint ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
+  'https://host.example/show/episode.mp3?id=42'
+```
+
+## Kotlin
+
+For Android (API 26 or later) and the JVM. JDK classes only: [`Attribution.kt`](kotlin/Attribution.kt) is one file to drop into an app.
+
+```kotlin
+val token = Attribution.mint(key, kid = "2026-11", iss = "https://exampleplayer.com", url = url)
+val request = Request.Builder().url(Attribution.attach(url, token)).build()
+```
+
+```sh
+cd examples/kotlin
+kotlinc Attribution.kt Main.kt -include-runtime -d attribution.jar
+java -jar attribution.jar ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
+  'https://host.example/show/episode.mp3?id=42'
+```
+
+Both mobile examples sign with ES256 and take the key as a parameter. Where that key lives is the application's decision; see [Protecting the key](../SPEC.md#protecting-the-key).
 
 ## Node
 
@@ -57,7 +102,7 @@ uv run examples/python/run_vectors.py
 
 ## Notes for implementers
 
-- **ES256 signatures are 64 bytes**, `r` then `s`. Most crypto libraries produce and expect DER by default; convert, or ask for the raw form (`dsaEncoding: 'ieee-p1363'` in Node).
+- **ES256 signatures are 64 bytes**, `r` then `s`. Most crypto libraries produce and expect DER by default; convert (as the Kotlin and Ruby examples do), or ask for the raw form (`dsaEncoding: 'ieee-p1363'` in Node, `rawRepresentation` in CryptoKit).
 - **Verify over the protected header bytes as received.** Do not decode and re-encode them.
 - **General-purpose CBOR decoders are lenient.** Many accept trailing data and duplicate map keys, which the specification requires a host to reject. The Python example shows one way to make a lenient decoder strict.
 - **Check types exactly.** In several languages `true == 1`; a claim of `true` is not `catv: 1`.
