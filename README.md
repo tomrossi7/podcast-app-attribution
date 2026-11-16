@@ -14,7 +14,7 @@ An app has no way to stand behind its own traffic, and a host has no way to tell
 
 ## The idea
 
-Email had the same problem with the `From` line. DKIM answered it: a domain publishes a public key, signs what it sends, and receivers check the signature against that key.
+Email had a similar problem: a message can claim to come from anyone. DKIM gave receivers something they can check. A domain publishes a public key and signs the mail it sends, and a receiver verifies that signature against the key. What this establishes is which domain signed the message, not who wrote it or what the `From` line says.
 
 This does the same for podcast apps. The app's domain is its identity. It publishes a key there, signs a short-lived token, and adds the token to the episode URL. Any host can check the token against the published key and attribute the request to that domain.
 
