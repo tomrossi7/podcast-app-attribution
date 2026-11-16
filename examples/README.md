@@ -15,13 +15,11 @@ node examples/node/sign.mjs test-vectors/private-keys.json 2026-11 https://examp
 node examples/node/verify.mjs test-vectors/keys.json https://exampleplayer.com '<the URL printed above>'
 ```
 
-The second command prints the result, with the verified issuer in `iss`:
+The second command prints the result:
 
 ```json
-{ "verified": true, "iss": "https://exampleplayer.com", "kid": "2026-11", "exp": 1800000300, "catu": true, "catm": true, "aud": null }
+{ "verified": true, "iss": "https://exampleplayer.com" }
 ```
-
-(`exp` will be five minutes from when you ran it.)
 
 Change a character of the path and run it again: `{ "verified": false, "reason": "url_mismatch" }`.
 
@@ -52,7 +50,7 @@ No dependencies. Node 18 or later. Every byte of the encoding is visible, which 
 | File | What |
 |---|---|
 | [`node/sign.mjs`](node/sign.mjs) | `mint()`: a per-request or session token. About 40 lines of substance. |
-| [`node/verify.mjs`](node/verify.mjs) | `verify()`: the six verification steps, in order. Returns the self-check document. |
+| [`node/verify.mjs`](node/verify.mjs) | `verify()`: the six verification checks. Returns the self-check document. |
 | [`node/url.mjs`](node/url.mjs) | Attaching and finding the `CAT` parameter, URL normalization, `catu` components. |
 | [`node/cbor.mjs`](node/cbor.mjs) | A strict, deterministic CBOR encoder and decoder for the handful of types a token uses. |
 
@@ -81,8 +79,6 @@ The same thing with libraries: [`cbor2`](https://pypi.org/project/cbor2/) for CB
 uv run examples/python/run_vectors.py
 # or: pip install cbor2 cryptography && python examples/python/run_vectors.py
 ```
-
-`mint()` here signs with ES256 only; `verify()` accepts ES256 and EdDSA.
 
 ## Swift and Kotlin
 
@@ -130,6 +126,6 @@ java -jar attribution.jar ../../test-vectors/private-keys.json 2026-11 https://e
 - **General-purpose CBOR decoders are lenient.** Many accept trailing data and duplicate map keys, which the specification requires a host to reject. The Python example shows one way to make a lenient decoder strict.
 - **Check types exactly.** In several languages `true == 1`; a claim of `true` is not `catv: 1`.
 - **Handle the request URL as a string.** URL classes normalize as they parse, and the as-received path and query matter for `catu`.
-- **`catu` match types.** The examples support exact, prefix, suffix, contains and SHA-256. Regular-expression and SHA-512/256 matches are reported as `url_mismatch`.
+- **`catu` match types.** Exact match is the one every host supports. The examples also handle prefix, suffix, contains and SHA-256; regular-expression and SHA-512/256 matches are reported as `url_mismatch`.
 
 Code here is MIT licensed (see [LICENSE](LICENSE)).

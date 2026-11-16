@@ -66,10 +66,10 @@ The token is binary, in CBOR (RFC 8949, a compact binary JSON-like format). It i
 
 ```mermaid
 flowchart LR
-    Q["?CAT=…"] -->|base64url decode| S["COSE_Sign1<br/>ES256 example, optional tag 18"]
+    Q["?CAT=…"] -->|base64url decode| S["COSE_Sign1<br/>optional tag 18"]
     S --> P["protected header: encoded map in bytes<br/>1: -7 (ES256)<br/>4: kid bytes"]
     S --> U["unprotected header<br/>(may hold kid instead)"]
-    S --> C["payload: encoded claims map in bytes<br/>1 iss · 4 exp · 6 iat · 7 cti · 310 catv<br/>+ optional 3 aud · 5 nbf · 312 catu · 313 catm"]
+    S --> C["payload: encoded claims map in bytes<br/>1 iss · 4 exp · 310 catv<br/>+ optional 3 aud · 5 nbf · 312 catu · 313 catm"]
     S --> G["signature<br/>64 bytes r‖s"]
 ```
 
@@ -86,19 +86,24 @@ Required:
 | Claim | Label | Type | Value |
 |---|---|---|---|
 | `iss` | 1 | text | The application's origin: `https://`, a lowercase ASCII hostname, and the port only if it is not 443. No path, query, fragment, credentials or trailing slash. Example: `https://exampleplayer.com`. |
-| `exp` | 4 | integer | Expiry, Unix seconds. MUST be after `iat` and no more than 24 hours after it. A few minutes is RECOMMENDED. |
-| `iat` | 6 | integer | Issued at, Unix seconds. |
-| `cti` | 7 | bytes | Token id: at least 8 cryptographically random bytes, generated independently for every token. |
+| `exp` | 4 | integer | Expiry, Unix seconds. A few minutes after minting is RECOMMENDED. A token verifies only during the 24 hours before its `exp` (see [Time](#time)). |
 | `catv` | 310 | integer | `1`. |
 
 Optional. When present a host MUST enforce them:
 
 | Claim | Label | Type | Value |
 |---|---|---|---|
-| `catu` | 312 | map | Restricts the token to a URL. A map from URL component (0 scheme, 1 host, 2 port, 3 path, 4 query) to a match rule; `{0: "value"}` means exact match. Issuers build it from the URL after removing the `CAT` parameter and normalizing as CTA-5007-B §4.6.10 describes. Hosts compare against the normalized request URL and, if that fails, once more with the path and query exactly as received (with only `CAT` removed), so an issuer that binds them verbatim still matches. Scheme, host and port are always compared normalized. A per-request token SHOULD exact-match scheme, host, path and query; port is optional. |
+| `catu` | 312 | map | Restricts the token to a URL. A map from URL component (0 scheme, 1 host, 2 port, 3 path, 4 query) to a match rule; `{0: "value"}` means exact match. Issuers build it from the URL after removing the `CAT` parameter and normalizing as CTA-5007-B §4.6.10 describes. Hosts compare against the normalized request URL and, if that fails, once more with the path and query exactly as received (with only `CAT` removed), so an issuer that binds them verbatim still matches. Scheme, host and port are always compared normalized. A per-request token SHOULD exact-match scheme, host, path and query; port is optional. Hosts MUST support exact match on these five components. The other match types and components CTA-5007-B defines are optional for hosts, and a `catu` that uses one a host does not support does not match on that host, so an issuer that wants every host to verify its tokens uses exact matches only. |
 | `catm` | 313 | array of text | HTTP methods the token is good for, normally `["GET", "HEAD"]`. Case-sensitive. |
 | `aud` | 3 | text | The intended recipient. Normally the origin of the public request URL: scheme, lowercase ASCII hostname, the port only if non-default, no trailing slash (unlike `iss`, the scheme follows the media URL and may be `http` or `https`). A host MUST accept its own request origin, compared exactly before any redirect or internal rewrite, and MAY accept other values configured per issuer, such as a URN the issuer uses for all recipients. A host behind a proxy takes its origin from its own trusted proxy configuration, not from arbitrary client headers. |
 | `nbf` | 5 | integer | Not before, Unix seconds. |
+
+Optional, with no meaning in this specification. Tokens from other CAT issuers often carry them, so they are allowed; a host checks only their type:
+
+| Claim | Label | Type | Value |
+|---|---|---|---|
+| `iat` | 6 | integer | Issued at, Unix seconds. |
+| `cti` | 7 | bytes | Token id. |
 
 Example `catu` for a per-request token on `https://host.example/show/episode.mp3?id=42`:
 
@@ -118,16 +123,26 @@ The token MUST NOT contain listener or device identifiers. `sub` is not used. No
 
 ### Signature
 
-- The protected header MUST contain `alg` (label 1): `-7` for ES256 (ECDSA with P-256 and SHA-256) or `-8` for EdDSA (Ed25519). Hosts MUST support ES256 and MAY support EdDSA. Applications MUST use ES256 unless they know the host accepts EdDSA.
+- The protected header MUST contain `alg` (label 1) with the value `-7`: ES256, which is ECDSA with P-256 and SHA-256. It is the only algorithm in this draft.
 - The `kid` header (label 4) is a byte string: the UTF-8 bytes of the `kid` of the JWK that signed the token. It MUST appear in exactly one of the protected or unprotected headers; hosts MUST accept either location.
 - The signature is computed as RFC 9052 §4.4 specifies, with empty external additional data. An ES256 signature is `r` then `s`, each as 32 unsigned big-endian bytes (left-padded with zeros), concatenated: 64 bytes, not DER.
 
 ### Two patterns
 
-Both are valid; a host MUST accept either. Per-request tokens are RECOMMENDED.
+Both are valid, and a host does not need to tell them apart: it enforces whatever restrictions a token carries. Per-request tokens are RECOMMENDED.
 
-- **Per request** (recommended). A fresh token for each media request, a few minutes long, bound to the URL with `catu`. It is useless anywhere else, and no identifier repeats across requests.
-- **Per session.** One token per application launch or per hour, without `catu`, attached to every request until it expires. Simpler for the application, at the cost of the same `cti` appearing on every request until expiry, which lets a host correlate them for that long.
+- **Per request** (recommended). A fresh token for each media request, a few minutes long, bound to the URL with `catu`. It is useless anywhere else, and every request carries a different token.
+- **Per session.** One token per application launch or per hour, without `catu`, attached to every request until it expires. Simpler for the application. The costs are that the same token appears on every request until it expires, which lets a host correlate them for that long, and that a copy of it works at any host.
+
+### Time
+
+A host takes `now` when the request arrives and allows no clock-skew leeway, as CTA-5007-B requires. A token verifies only when all of these hold:
+
+- `now < exp`.
+- `exp ≤ now + 86400`.
+- `nbf ≤ now`, when `nbf` is present.
+
+The second rule means any one token can verify for at most 24 hours: from 24 hours before its `exp` until its `exp`. It bounds how long a copied token keeps working, and it makes a long-lived token pointless. It is not a limit on when the token was minted, which a host cannot observe. A token minted with a later `exp` simply does not verify until its last 24 hours.
 
 Verification happens when the host receives a request. Expiry during a transfer does not affect that transfer; a later request, including a resumed range request, needs a token that is valid at that moment.
 
@@ -151,7 +166,7 @@ Unless a host has configured another location for the issuer (below), the applic
 <iss>/.well-known/podcast-app-keys.json
 ```
 
-- Public keys only. Each key MUST carry `kid` (unique within the set), `kty`, `use: "sig"` and the curve parameters: `kty: "EC"`, `crv: "P-256"`, `x`, `y` for ES256; `kty: "OKP"`, `crv: "Ed25519"`, `x` for EdDSA. If a key carries `alg` it MUST match the token's algorithm (`"ES256"` or `"EdDSA"`); if it carries `key_ops` the array MUST include `"verify"`. A key that does not meet these requirements, or whose type does not fit the token's algorithm, is treated as absent.
+- Public keys only. Each signing key MUST carry `kid` (unique within the set), `use: "sig"`, `kty: "EC"`, `crv: "P-256"`, `x` and `y`. If it carries `alg` that MUST be `"ES256"`; if it carries `key_ops` the array MUST include `"verify"`. Any key in the set that does not meet these requirements is treated as absent.
 - The response SHOULD include `Cache-Control: max-age=<seconds>`. Hosts MUST use that lifetime, or one hour when none is given, and SHOULD refresh before it expires. If the cached set expires before a successful refresh, verification returns `key_unavailable` until a fresh set is available.
 - To rotate: publish the new key beside the old one, wait at least the lifetime advertised for the previous key set (or one hour), start signing with the new key, and remove the old key only after the last token signed with it has expired.
 
@@ -182,16 +197,18 @@ Appending a parameter can break URLs that are themselves signed by a third party
 
 ## Verification
 
-A host verifies a token with the steps below, in this order. The first check that fails decides the reason, so two hosts report the same reason for the same token.
+A request is **verified** when it carries one token that passes every check below. Otherwise it is **unverified**, which includes a request with no token.
 
-1. **Decode.** Decode the base64url value as one complete COSE_Sign1 with an embedded claims-map payload. Reject trailing data, duplicate map keys, an unsupported `alg`, a missing `kid`, a label present in both headers, and any `crit` header (label 2) entry the verifier does not understand. Hosts SHOULD also reject tokens that are not deterministically encoded. Ignore unknown claims. Failure: `malformed`.
-2. **Claims.** Check that every required claim is present with the type and checkable constraints above (`iss` syntax, `cti` at least 8 bytes, `catv` equal to `1`), that optional claims have the types above, and that `iat < exp ≤ iat + 86400`. Failure: `malformed`. Randomness of `cti` and the absence of listener identifiers cannot be checked from the bytes; they are issuer obligations.
-3. **Time.** With `now` captured when the request arrived, and no clock-skew leeway (CTA-5007-B requires this): `now < exp`, else `expired`; `nbf ≤ now` when present, else `not_yet_valid`.
-4. **Key.** Select the key for (`iss`, `kid`) from the issuer's cached set, published at the well-known path or at the location configured for that issuer. Keys are only ever looked up under the token's own `iss`. No usable key: `key_unavailable`.
-5. **Signature.** Failure: `bad_signature`.
-6. **Restrictions**, when present, against the request as received: `catu` (`url_mismatch`), then `catm` (`method_mismatch`), then `aud` (`audience_mismatch`). A `catu` using a match type the host does not support fails as `url_mismatch`.
+Hosts need to agree on that outcome and on the issuer. They do not need to agree on why a request failed. A host MAY make the checks in any order, and the reasons named here are diagnostic: a token with more than one fault can fairly be reported under any of them.
 
-The outcome is a verified issuer, or *unverified* with one of the reasons above.
+1. **Decode.** The base64url value decodes as one complete COSE_Sign1 with an embedded claims-map payload. Reject trailing data, duplicate map keys, an `alg` other than ES256, a missing `kid`, a label present in both headers, and any `crit` header (label 2) entry the verifier does not understand. Hosts SHOULD also reject tokens that are not deterministically encoded. Ignore unknown claims. Reason: `malformed`.
+2. **Claims.** `iss`, `exp` and `catv` are present with the types and constraints above (`iss` syntax, `catv` equal to `1`), and any optional claim that is present has the type above. Reason: `malformed`. The absence of listener identifiers cannot be checked from the bytes; it is an issuer obligation.
+3. **Time.** The rules in [Time](#time) hold. Reason: `expired` when `now` has reached `exp`, otherwise `not_yet_valid`.
+4. **Key.** The issuer's cached set, published at the well-known path or at the location configured for that issuer, has a usable key for (`iss`, `kid`). Keys are only ever looked up under the token's own `iss`. Reason: `key_unavailable`.
+5. **Signature.** The signature verifies with that key. Reason: `bad_signature`.
+6. **Restrictions.** Each one present matches the request as received: `catu` (`url_mismatch`), `catm` (`method_mismatch`), `aud` (`audience_mismatch`).
+
+The outcome is a verified issuer, which is the token's `iss`, or *unverified*.
 
 What the host does next is its own policy. A host MAY serve an unverified request exactly as it does today, MAY record the verified issuer in its statistics, and MAY apply any other policy it chooses. This specification does not require any particular treatment of signed, unsigned or failed requests.
 
@@ -203,27 +220,28 @@ A host implementing this specification SHOULD serve a self-check endpoint:
 GET <host>/.well-known/podcast-app-attribution?CAT=<token>
 ```
 
-A host implementing the self-check endpoint MUST respond `200` with `Content-Type: application/json` and `Cache-Control: no-store`. On success:
+A host implementing the self-check endpoint MUST respond `200` with `Content-Type: application/json` and `Cache-Control: no-store`. For a verified token:
 
 ```json
-{ "verified": true, "iss": "https://exampleplayer.com", "kid": "2026-11", "exp": 1800000000,
-  "catu": true, "catm": null, "aud": null }
+{ "verified": true, "iss": "https://exampleplayer.com" }
 ```
 
-where each restriction field is `true` when present and matched, `null` when absent. On failure:
+Otherwise:
 
 ```json
 { "verified": false, "reason": "bad_signature" }
 ```
 
-using a reason from [Verification](#verification). The check evaluates `catu`, `catm` and `aud` against the self-check request itself. An otherwise valid token bound to an episode URL therefore reports `url_mismatch`, which says nothing about its signature; an earlier failure (`expired`, `bad_signature`) is reported instead when it occurs first. To test a per-request token end to end, the issuer needs to be able to mint one bound to the self-check URL.
+`reason` is optional. When given, it SHOULD be one of the reasons from [Verification](#verification).
+
+The check evaluates `catu`, `catm` and `aud` against the self-check request itself. An otherwise valid token bound to an episode URL is therefore unverified here (`url_mismatch`), which says nothing about its signature. To test a per-request token end to end, the issuer mints one bound to the self-check URL.
 
 ## Deployment considerations
 
 This section is not normative. It records how the query parameter meets real podcast delivery, including the parts Draft 0.1 does not solve.
 
 - **Redirects.** The token goes to the server named in the enclosure URL, which is the first hop. Many enclosure URLs redirect, through a measurement prefix or from the host to its CDN. What reaches a later hop depends on whether each redirecting server copies the query string. A session token that is forwarded can still verify there. A URL-bound token cannot, because it is bound to the first URL, and reports `url_mismatch`. In practice the server at the enclosure URL is the one that can verify, and a host that sits behind a third party's prefix may receive nothing usable.
-- **Caching.** Every token makes a different URL. A CDN that includes the whole query string in its cache key, which is the default on several, treats each tokened request as a new object and fetches it from the origin again. A host that verifies tokens needs to leave `CAT` out of the cache key. A host that does not verify them pays that cost for nothing, and Draft 0.1 gives an application no way to tell the two apart (see [Open questions](#open-questions)). Until it does, applications are better off sending tokens to hosts they know verify them than to every host.
+- **Caching.** Every token makes a different URL. A CDN that includes the whole query string in its cache key, which is the default on several, treats each tokened request as a new object and fetches it from the origin again. A host that verifies tokens therefore needs `CAT` left out of the cache key while still seeing it. Two ways to do that are to verify at the edge before the cache lookup, or to verify afterwards from request logs, which can record the full URL even when the response came from cache. A host that does not verify tokens, and whose CDN keys on the query string, would see more cache misses from applications that send them. How much that matters in practice is something this draft is meant to find out (see [Open questions](#open-questions)).
 - **URLs that are already signed.** Some enclosure URLs carry a signature of their own that covers the query string, and reject any added parameter. This is why [Attaching the token](#attaching-the-token) asks applications to be able to turn attribution off per origin.
 - **Logs and forwarded URLs.** A token in a URL is written wherever URLs are written: access logs at every hop, CDN logs, and anything downstream that stores request URLs. Anyone who can read it can replay it until it expires, within its restrictions. Short lifetimes are the main defence. A host can also drop the `CAT` value from logs it keeps, and leave it out of the redirects it issues.
 - **Range requests and long sessions.** A player fetches one episode with many requests, and each is verified by itself. A player that fixes the URL when playback starts keeps sending the same token, so requests made after it expires report `expired` while earlier ones verified. One play can therefore be partly verified, and how a host attributes it is the host's policy. An application that can sign each request should. One that cannot may prefer a lifetime that covers a typical session, within the 24-hour limit.
@@ -231,7 +249,7 @@ This section is not normative. It records how the query parameter meets real pod
 
 ## Security considerations
 
-- **Replay.** A token can be replayed until it expires wherever its restrictions match: `catu` limits the URLs, `catm` the methods, `aud` the recipient. A session token without `aud` or `catu` can be replayed to any host. `cti` identifies a token but does not prevent replay. Short expiries limit the window. This is acceptable for an attribution signal; it would not be for access control.
+- **Replay.** A token can be replayed until it expires wherever its restrictions match: `catu` limits the URLs, `catm` the methods, `aud` the recipient. A session token without `aud` or `catu` can be replayed to any host. Short expiries limit the window, and no token verifies for longer than 24 hours. This is acceptable for an attribution signal; it would not be for access control.
 - **Key fetching.** The `iss` of an unverified token is a URL the host is about to fetch. Automatic discovery MUST verify TLS certificates, MUST check the actual connection destination against loopback, private, link-local and other non-public ranges on every connection, MUST refuse redirects outside the issuer's origin, and MUST limit response size and fetch rate both globally and per issuer. Any other key location requires explicit per-issuer configuration.
 - **Key compromise.** An extracted signing key lets anyone sign as the application for as long as a host still trusts that key; removing it from the published set takes effect at each host only once that host's cached set refreshes. Rotation is the remedy, which is why keys are fetched from the origin rather than pinned.
 
@@ -239,5 +257,5 @@ This section is not normative. It records how the query parameter meets real pod
 
 - Whether `aud` should become required.
 - Whether hosts should strip `CAT` before redirecting to media on a third-party CDN, so the token never reaches another party's logs.
-- How an application learns which hosts verify tokens, so that it does not send them to hosts that do not. The self-check endpoint could double as that signal.
+- Whether applications need a way to learn which hosts verify tokens, and what it would be. It should not require an application to keep a list of hosts or to make an extra request before fetching media.
 - Whether an application should sign each hop of a redirect chain, where its HTTP client allows that.

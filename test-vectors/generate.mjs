@@ -8,29 +8,30 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { decode, encode, Tagged } from '../examples/node/cbor.mjs';
-import { ALG, AUD, CATM, CATU, CATV, CTI, EXP, IAT, ISS, KID, NBF, algorithmFor, exactUrl, signCose, toBase64Url } from '../examples/node/sign.mjs';
+import { ALG, AUD, CATM, CATU, CATV, CTI, ES256, EXP, IAT, ISS, KID, NBF, exactUrl, signCose, toBase64Url } from '../examples/node/sign.mjs';
 
 const here = (name) => new URL(name, import.meta.url);
 
 const ISSUER = 'https://exampleplayer.com';
-const ES_KID = '2026-11';
-const ED_KID = '2026-11-ed';
-const IAT_TIME = 1800000000; // 2027-01-15T08:00:00Z
-const NOW = IAT_TIME + 60;
+const KEY_ID = '2026-11';
+const ENC_KID = '2026-11-enc'; // a published key that is not for signing
+const MINTED = 1800000000; // 2027-01-15T08:00:00Z
+const NOW = MINTED + 60;
+const WINDOW = 86400;
 const EPISODE = 'https://host.example/show/episode.mp3';
 
 // --- keys -----------------------------------------------------------------------------------
 
 if (!existsSync(here('keys.json'))) {
-  const es = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-  const ed = generateKeyPairSync('ed25519');
-  const jwk = (key, kid) => ({ ...key.export({ format: 'jwk' }), use: 'sig', kid });
-  writeJson('keys.json', { keys: [jwk(es.publicKey, ES_KID), jwk(ed.publicKey, ED_KID)] });
-  writeJson('private-keys.json', { keys: [jwk(es.privateKey, ES_KID), jwk(ed.privateKey, ED_KID)] });
+  const signing = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const other = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const jwk = (key, kid, use) => ({ ...key.export({ format: 'jwk' }), use, kid });
+  writeJson('keys.json', { keys: [jwk(signing.publicKey, KEY_ID, 'sig'), jwk(other.publicKey, ENC_KID, 'enc')] });
+  writeJson('private-keys.json', { keys: [jwk(signing.privateKey, KEY_ID, 'sig'), jwk(other.privateKey, ENC_KID, 'enc')] });
 }
 const privateKeys = JSON.parse(readFileSync(here('private-keys.json'), 'utf8')).keys;
-const esKey = privateKeys.find((k) => k.kid === ES_KID);
-const edKey = privateKeys.find((k) => k.kid === ED_KID);
+const signingKey = privateKeys.find((k) => k.kid === KEY_ID);
+const encKey = privateKeys.find((k) => k.kid === ENC_KID);
 const strangerKey = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ format: 'jwk' });
 
 // --- building tokens ------------------------------------------------------------------------
@@ -39,9 +40,7 @@ const strangerKey = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKe
 function claims(overrides = {}) {
   const map = new Map([
     [ISS, ISSUER],
-    [EXP, IAT_TIME + 300],
-    [IAT, IAT_TIME],
-    [CTI, randomBytes(16)],
+    [EXP, MINTED + 300],
     [CATV, 1],
   ]);
   for (const [label, value] of Object.entries(overrides)) {
@@ -51,9 +50,9 @@ function claims(overrides = {}) {
   return map;
 }
 
-function cose({ payload, key = esKey, kid = ES_KID, kidIn = 'protected', tags = [18], protectedExtra = [], unprotectedExtra = [] }) {
+function cose({ payload, key = signingKey, kid = KEY_ID, kidIn = 'protected', tags = [18], protectedExtra = [], unprotectedExtra = [] }) {
   const kidEntry = [KID, Buffer.from(kid, 'utf8')];
-  const protectedHeader = new Map([[ALG, algorithmFor(key)], ...(kidIn === 'protected' ? [kidEntry] : []), ...protectedExtra]);
+  const protectedHeader = new Map([[ALG, ES256], ...(kidIn === 'protected' ? [kidEntry] : []), ...protectedExtra]);
   const unprotectedHeader = new Map([...(kidIn === 'unprotected' ? [kidEntry] : []), ...unprotectedExtra]);
   let item = signCose({ protectedHeader, unprotectedHeader, payload, privateJwk: key });
   for (const tag of tags) item = new Tagged(tag, item);
@@ -68,16 +67,7 @@ function attach(url, bytes, { padded = false } = {}) {
 }
 
 const exact = (value) => new Map([[0, value]]);
-const verified = (restrictions = {}) => ({
-  verified: true,
-  iss: ISSUER,
-  kid: ES_KID,
-  exp: IAT_TIME + 300,
-  catu: null,
-  catm: null,
-  aud: null,
-  ...restrictions,
-});
+const verified = () => ({ verified: true, iss: ISSUER });
 const unverified = (reason) => ({ verified: false, reason });
 
 // --- the vectors ----------------------------------------------------------------------------
@@ -93,7 +83,7 @@ function vector(name, description, { url, method = 'GET', now = NOW, expected, .
   const url = EPISODE + '?id=42';
   vector('per-request', 'The recommended pattern: bound to one URL with catu and to GET/HEAD with catm. Tag 18, kid in the protected header. The URL already has a query; CAT is appended after it.', {
     url: attach(url, token({ claims: claims({ [CATU]: exactUrl(url), [CATM]: ['GET', 'HEAD'] }) })),
-    expected: verified({ catu: true, catm: true }),
+    expected: verified(),
   });
 }
 
@@ -108,22 +98,26 @@ vector('session-head', 'The same kind of token on a HEAD request.', {
   expected: verified(),
 });
 
-vector('lifetime-24-hours', 'The longest lifetime allowed (exp = iat + 86400), checked one second before it expires.', {
-  url: attach(EPISODE, token({ claims: claims({ [EXP]: IAT_TIME + 86400 }) })),
-  now: IAT_TIME + 86399,
-  expected: verified({ exp: IAT_TIME + 86400 }),
+vector('expires-in-24-hours', 'exp is exactly 24 hours after the request arrives, the furthest ahead a host accepts.', {
+  url: attach(EPISODE, token({ claims: claims({ [EXP]: NOW + WINDOW }) })),
+  expected: verified(),
 });
 
-vector('kid-unprotected', 'kid in the unprotected header, CWT tag 61 around COSE tag 18, and nbf equal to iat.', {
-  url: attach(EPISODE, token({ claims: claims({ [NBF]: IAT_TIME }), kidIn: 'unprotected', tags: [18, 61] })),
+vector('iat-and-cti', 'Carries the optional iat and cti claims, as tokens from other CAT issuers often do. They are allowed and change nothing.', {
+  url: attach(EPISODE, token({ claims: claims({ [IAT]: MINTED, [CTI]: randomBytes(16) }) })),
+  expected: verified(),
+});
+
+vector('kid-unprotected', 'kid in the unprotected header, CWT tag 61 around COSE tag 18, and an nbf that has passed.', {
+  url: attach(EPISODE, token({ claims: claims({ [NBF]: MINTED }), kidIn: 'unprotected', tags: [18, 61] })),
   expected: verified(),
 });
 
 {
   // Pick a token whose length needs base64 padding.
   let bytes;
-  for (let n = 16; ; n++) {
-    bytes = token({ claims: claims({ [CTI]: randomBytes(n) }), tags: [] });
+  for (let n = 0; ; n++) {
+    bytes = token({ claims: claims(n ? { [CTI]: randomBytes(n) } : {}), tags: [] });
     if (bytes.length % 3 !== 0) break;
   }
   vector('untagged-padded', 'An untagged COSE_Sign1, base64url-encoded with "=" padding.', {
@@ -134,45 +128,40 @@ vector('kid-unprotected', 'kid in the unprotected header, CWT tag 61 around COSE
 
 vector('aud-origin', 'aud names the origin the request arrived on.', {
   url: attach(EPISODE, token({ claims: claims({ [AUD]: 'https://host.example' }) })),
-  expected: verified({ aud: true }),
+  expected: verified(),
 });
 
 vector('aud-configured', 'aud is a value the host has configured as acceptable for this issuer.', {
   url: attach(EPISODE, token({ claims: claims({ [AUD]: 'urn:example:podcast-hosts' }) })),
   accepted_audiences: ['urn:example:podcast-hosts'],
-  expected: verified({ aud: true }),
+  expected: verified(),
 });
 
 vector('catu-normalized', 'The request URL is matched after normalization: scheme and host lowercased, default port removed, dot segments resolved, "%7E" decoded to "~". The catu port component is the empty string.', {
   url: attach('HTTPS://Host.Example:443/show/extra/../%7Eepisode.mp3', token({
     claims: claims({ [CATU]: new Map([[0, exact('https')], [1, exact('host.example')], [2, exact('')], [3, exact('/show/~episode.mp3')]]) }),
   })),
-  expected: verified({ catu: true }),
+  expected: verified(),
 });
 
 vector('catu-verbatim', 'The issuer bound the query exactly as written ("q=%7e") rather than normalized ("q=~"). The normalized comparison fails; the second comparison, with the path and query as received, succeeds.', {
   url: attach(EPISODE + '?q=%7e', token({
     claims: claims({ [CATU]: new Map([[0, exact('https')], [1, exact('host.example')], [3, exact('/show/episode.mp3')], [4, exact('q=%7e')]]) }),
   })),
-  expected: verified({ catu: true }),
+  expected: verified(),
 });
 
-vector('catu-prefix', 'catu restricts the host exactly and the path by prefix, so the token covers a whole show.', {
+vector('catu-prefix', 'catu restricts the host exactly and the path by prefix, so the token covers a whole show. Prefix matching is optional for hosts; one that does not support it reports the request as unverified.', {
   url: attach(EPISODE, token({ claims: claims({ [CATU]: new Map([[1, exact('host.example')], [3, new Map([[1, '/show/']])]]) }) })),
-  expected: verified({ catu: true }),
-});
-
-vector('eddsa', 'Signed with Ed25519 (alg -8). Hosts MAY support EdDSA; one that does not reports "malformed".', {
-  url: attach(EPISODE, token({ key: edKey, kid: ED_KID })),
-  requires: 'EdDSA',
-  expected: verified({ kid: ED_KID }),
+  requires: 'catu-prefix',
+  expected: verified(),
 });
 
 // Unverified: time.
 
 vector('expired', 'now equals exp. A token is valid only while now < exp.', {
   url: attach(EPISODE, token()),
-  now: IAT_TIME + 300,
+  now: MINTED + 300,
   expected: unverified('expired'),
 });
 
@@ -181,9 +170,9 @@ vector('not-yet-valid', 'nbf is one second in the future. No clock-skew leeway i
   expected: unverified('not_yet_valid'),
 });
 
-vector('lifetime-too-long', 'exp is more than 24 hours after iat.', {
-  url: attach(EPISODE, token({ claims: claims({ [EXP]: IAT_TIME + 86401 }) })),
-  expected: unverified('malformed'),
+vector('expires-too-far-ahead', 'exp is one second more than 24 hours after the request arrives. The same token verifies a second later.', {
+  url: attach(EPISODE, token({ claims: claims({ [EXP]: NOW + WINDOW + 1 }) })),
+  expected: unverified('not_yet_valid'),
 });
 
 // Unverified: keys and signature.
@@ -212,17 +201,17 @@ vector('unknown-issuer', 'A well-formed token from an issuer the host has no cac
   expected: unverified('key_unavailable'),
 });
 
-vector('kid-names-wrong-key-type', 'An ES256 token whose kid names the Ed25519 key. A key that does not fit the token\'s algorithm is treated as absent.', {
-  url: attach(EPISODE, token({ kid: ED_KID })),
+vector('key-not-for-signing', 'Correctly signed by a key the issuer publishes with use "enc". A published key that is not a signing key is treated as absent.', {
+  url: attach(EPISODE, token({ key: encKey, kid: ENC_KID })),
   expected: unverified('key_unavailable'),
 });
 
 {
   const bytes = Buffer.from(token());
   bytes[bytes.length - 1] ^= 0x01;
-  vector('expired-before-signature', 'Expired and badly signed. Claims and time are checked before the key is looked up, so the reason is "expired".', {
+  vector('expired-and-badly-signed', 'Two faults at once. It is unverified either way; which reason a verifier reports depends on the order of its checks.', {
     url: attach(EPISODE, bytes),
-    now: IAT_TIME + 600,
+    now: MINTED + 600,
     expected: unverified('expired'),
   });
 }
@@ -252,13 +241,8 @@ vector('audience-mismatch', 'aud names another host.', {
 
 // Unverified: malformed.
 
-vector('missing-cti', 'A required claim is absent.', {
-  url: attach(EPISODE, token({ claims: claims({ [CTI]: undefined }) })),
-  expected: unverified('malformed'),
-});
-
-vector('short-cti', 'cti is 4 bytes; at least 8 are required.', {
-  url: attach(EPISODE, token({ claims: claims({ [CTI]: randomBytes(4) }) })),
+vector('missing-exp', 'A required claim is absent.', {
+  url: attach(EPISODE, token({ claims: claims({ [EXP]: undefined }) })),
   expected: unverified('malformed'),
 });
 
@@ -280,15 +264,15 @@ vector('iss-not-https', 'iss uses http.', {
 vector('unsupported-alg', 'The protected header says ES384 (alg -35).', {
   url: attach(EPISODE, (() => {
     const payload = encode(claims());
-    const [, unprotectedHeader, , signature] = signCose({ protectedHeader: new Map(), payload, privateJwk: esKey });
-    const protectedBytes = encode(new Map([[ALG, -35], [KID, Buffer.from(ES_KID)]]));
+    const [, unprotectedHeader, , signature] = signCose({ protectedHeader: new Map(), payload, privateJwk: signingKey });
+    const protectedBytes = encode(new Map([[ALG, -35], [KID, Buffer.from(KEY_ID)]]));
     return encode(new Tagged(18, [protectedBytes, unprotectedHeader, payload, signature]));
   })()),
   expected: unverified('malformed'),
 });
 
 vector('kid-in-both-headers', 'kid appears in the protected and the unprotected header.', {
-  url: attach(EPISODE, token({ unprotectedExtra: [[KID, Buffer.from(ES_KID)]] })),
+  url: attach(EPISODE, token({ unprotectedExtra: [[KID, Buffer.from(KEY_ID)]] })),
   expected: unverified('malformed'),
 });
 

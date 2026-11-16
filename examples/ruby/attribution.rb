@@ -5,24 +5,25 @@
 #   Net::HTTP.get(URI(Attribution.attach(url, token)))
 #
 #   result = Attribution.verify(url, keys_for: ->(iss) { cached_key_set(iss) })
-#   # {"verified" => true, "iss" => ..., "kid" => ..., "exp" => ..., "catu" => ..., "catm" => ..., "aud" => ...}
-#   # or {"verified" => false, "reason" => ...}
+#   # {"verified" => true, "iss" => ...} or {"verified" => false, "reason" => ...}
+#
+# "verified" and "iss" are what hosts agree on. "reason" is diagnostic, and reports the first
+# check that failed in the order this file makes them.
 #
 # `keys_for` returns the cached JWK Set for an issuer, or nil when none is cached. It must not
 # fetch: keys are refreshed in the background, never while a request waits.
 
 require "openssl"
-require "securerandom"
 require "stringio"
 require_relative "cbor"
 
 module Attribution
   # CWT and CAT claim labels (IANA CWT Claims registry).
   ISS, AUD, EXP, NBF, IAT, CTI, CATV, CATU, CATM = 1, 3, 4, 5, 6, 7, 310, 312, 313
-  # COSE header labels and algorithm values.
-  ALG, CRIT, KID, ES256, EDDSA = 1, 2, 4, -7, -8
+  # COSE header labels and the ES256 algorithm value.
+  ALG, CRIT, KID, ES256 = 1, 2, 4, -7
 
-  MAX_LIFETIME = 86_400
+  WINDOW = 86_400 # a token verifies only during the 24 hours before it expires
   ISSUER = /\Ahttps:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?\z/
 
   Unverified = Class.new(StandardError)
@@ -33,13 +34,13 @@ module Attribution
 
   # A per-request token when `url` is given, otherwise a session token.
   def mint(private_jwk, kid:, iss:, url: nil, methods: %w[GET HEAD], aud: nil, lifetime: 300, now: Time.now.to_i)
-    claims = { ISS => iss, EXP => now + lifetime, IAT => now, CTI => SecureRandom.bytes(16), CATV => 1 }
+    claims = { ISS => iss, EXP => now + lifetime, CATV => 1 }
     claims[AUD] = aud if aud
     if url
       claims[CATU] = exact_url(url)
       claims[CATM] = methods
     end
-    protected_header = { ALG => algorithm_for(private_jwk), KID => kid.b }
+    protected_header = { ALG => ES256, KID => kid.b }
     cose = sign_cose(protected_header: protected_header, payload: CBOR.encode(claims), private_jwk: private_jwk)
     base64url(CBOR.encode(CBOR::Tagged.new(18, cose)))
   end
@@ -63,15 +64,9 @@ module Attribution
   # COSE_Sign1 (RFC 9052 §4.2): [protected header as bytes, unprotected header, payload, signature].
   def sign_cose(protected_header:, payload:, private_jwk:, unprotected_header: {})
     protected_bytes = CBOR.encode(protected_header)
-    data = to_be_signed(protected_bytes, payload)
-    signature =
-      if algorithm_for(private_jwk) == ES256
-        der = ec_private_key(private_jwk).sign("SHA256", data)
-        # DER → the 64-byte r ‖ s form COSE uses.
-        OpenSSL::ASN1.decode(der).value.map { |int| int.value.to_s(2).rjust(32, "\0".b) }.join
-      else
-        OpenSSL::PKey.new_raw_private_key("ED25519", unbase64url(private_jwk["d"])).sign(nil, data)
-      end
+    der = ec_private_key(private_jwk).sign("SHA256", to_be_signed(protected_bytes, payload))
+    # DER → the 64-byte r ‖ s form COSE uses.
+    signature = OpenSSL::ASN1.decode(der).value.map { |int| int.value.to_s(2).rjust(32, "\0".b) }.join
     [protected_bytes, unprotected_header, payload, signature]
   end
 
@@ -92,7 +87,7 @@ module Attribution
     # 1. Decode.
     protected_bytes, protected_header, unprotected_header, payload, signature = decode_token(tokens.first)
     alg = protected_header[ALG]
-    fail!("malformed") unless [ES256, EDDSA].include?(alg)
+    fail!("malformed") unless alg == ES256
     fail!("malformed") if protected_header.key?(CRIT) # no extensions are understood
     fail!("malformed") if (protected_header.keys & unprotected_header.keys).any?
     kid = protected_header[KID] || unprotected_header[KID]
@@ -101,32 +96,33 @@ module Attribution
     fail!("malformed") unless kid.valid_encoding?
     claims = decode_map(payload)
 
-    # 2. Claims.
+    # 2. Claims: iss, exp and catv are required; the rest are checked when present.
     iss, exp, iat, cti = claims.values_at(ISS, EXP, IAT, CTI)
     nbf, aud, catu, catm = claims.values_at(NBF, AUD, CATU, CATM)
     well_formed =
       text?(iss) && ISSUER.match?(iss) && !iss.end_with?(":443") &&
-      exp.is_a?(Integer) && iat.is_a?(Integer) &&
-      bytes?(cti) && cti.bytesize >= 8 &&
+      exp.is_a?(Integer) &&
       claims[CATV] == 1 &&
+      (iat.nil? || iat.is_a?(Integer)) &&
+      (cti.nil? || bytes?(cti)) &&
       (nbf.nil? || nbf.is_a?(Integer)) &&
       (aud.nil? || text?(aud)) &&
       (catu.nil? || url_restriction?(catu)) &&
-      (catm.nil? || (catm.is_a?(Array) && catm.any? && catm.all? { |m| text?(m) })) &&
-      iat < exp && exp <= iat + MAX_LIFETIME
+      (catm.nil? || (catm.is_a?(Array) && catm.any? && catm.all? { |m| text?(m) }))
     fail!("malformed") unless well_formed
 
     # 3. Time, with no leeway.
     fail!("expired") unless now < exp
+    fail!("not_yet_valid") unless exp <= now + WINDOW
     fail!("not_yet_valid") unless nbf.nil? || nbf <= now
 
     # 4. The key, looked up only under the token's own issuer.
     key_set = keys_for.call(iss) || { "keys" => [] }
-    jwk = key_set["keys"].find { |k| k["kid"] == kid && usable?(k, alg) }
+    jwk = key_set["keys"].find { |k| k["kid"] == kid && usable?(k) }
     fail!("key_unavailable") unless jwk
 
     # 5. Signature.
-    fail!("bad_signature") unless signature_valid?(alg, jwk, to_be_signed(protected_bytes, payload), signature)
+    fail!("bad_signature") unless signature_valid?(jwk, to_be_signed(protected_bytes, payload), signature)
 
     # 6. Restrictions, against the request as received.
     if catu
@@ -139,15 +135,7 @@ module Attribution
     fail!("method_mismatch") unless catm.nil? || catm.include?(method)
     fail!("audience_mismatch") unless aud.nil? || aud == origin(url) || audiences_for.call(iss).include?(aud)
 
-    {
-      "verified" => true,
-      "iss" => iss,
-      "kid" => kid,
-      "exp" => exp,
-      "catu" => catu ? true : nil,
-      "catm" => catm ? true : nil,
-      "aud" => aud ? true : nil
-    }
+    { "verified" => true, "iss" => iss }
   end
 
   def fail!(reason)
@@ -195,32 +183,20 @@ module Attribution
     CBOR.encode(["Signature1", protected_bytes, "".b, payload])
   end
 
-  # A published key that does not fit the token's algorithm is treated as absent.
-  def usable?(jwk, alg)
-    kty, crv, name = alg == ES256 ? %w[EC P-256 ES256] : %w[OKP Ed25519 EdDSA]
-    jwk["kty"] == kty && jwk["crv"] == crv && jwk["use"] == "sig" &&
-      jwk.fetch("alg", name) == name && jwk.fetch("key_ops", ["verify"]).include?("verify")
+  # A published key that is not an ES256 signing key is treated as absent.
+  def usable?(jwk)
+    jwk["kty"] == "EC" && jwk["crv"] == "P-256" && jwk["use"] == "sig" &&
+      jwk.fetch("alg", "ES256") == "ES256" && jwk.fetch("key_ops", ["verify"]).include?("verify")
   end
 
-  def signature_valid?(alg, jwk, data, signature)
-    if alg == ES256
-      return false unless signature.bytesize == 64
+  def signature_valid?(jwk, data, signature)
+    return false unless signature.bytesize == 64
 
-      # r ‖ s → DER, which is what OpenSSL verifies.
-      der = OpenSSL::ASN1::Sequence([signature[0, 32], signature[32, 32]].map { |n| OpenSSL::ASN1::Integer(OpenSSL::BN.new(n, 2)) }).to_der
-      ec_public_key(jwk).verify("SHA256", der, data)
-    else
-      OpenSSL::PKey.new_raw_public_key("ED25519", unbase64url(jwk["x"])).verify(nil, signature, data)
-    end
+    # r ‖ s → DER, which is what OpenSSL verifies.
+    der = OpenSSL::ASN1::Sequence([signature[0, 32], signature[32, 32]].map { |n| OpenSSL::ASN1::Integer(OpenSSL::BN.new(n, 2)) }).to_der
+    ec_public_key(jwk).verify("SHA256", der, data)
   rescue OpenSSL::OpenSSLError, ArgumentError
     false
-  end
-
-  def algorithm_for(jwk)
-    return ES256 if jwk["kty"] == "EC" && jwk["crv"] == "P-256"
-    return EDDSA if jwk["kty"] == "OKP" && jwk["crv"] == "Ed25519"
-
-    raise ArgumentError, "unsupported key type"
   end
 
   # OpenSSL reads keys from DER, so wrap the JWK's raw numbers in the standard structures:
@@ -267,8 +243,8 @@ module Attribution
     end
   end
 
-  # Exact, prefix, suffix, contains and SHA-256. A match type this verifier does not support
-  # (regular expression, SHA-512/256) fails the match, as CTA-5007-B requires.
+  # Exact is the match every host supports. This verifier also handles prefix, suffix, contains
+  # and SHA-256. A match type a verifier does not support fails the match.
   def component_matches?(type, expected, actual)
     return bytes?(expected) && OpenSSL::Digest::SHA256.digest(actual) == expected if type == -1
     return false unless text?(expected)

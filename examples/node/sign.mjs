@@ -14,7 +14,7 @@
 //
 // The key file holds one private JWK, or a JWK Set from which the key named by kid is taken.
 
-import { createPrivateKey, randomBytes, sign as signBytes } from 'node:crypto';
+import { createPrivateKey, sign as signBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { encode, Tagged } from './cbor.mjs';
@@ -22,15 +22,13 @@ import { attach, extractTokens, normalize, split } from './url.mjs';
 
 // CWT and CAT claim labels (IANA CWT Claims registry).
 export const ISS = 1, AUD = 3, EXP = 4, NBF = 5, IAT = 6, CTI = 7, CATV = 310, CATU = 312, CATM = 313;
-// COSE header labels and algorithm values.
-export const ALG = 1, KID = 4, ES256 = -7, EDDSA = -8;
+// COSE header labels and the ES256 algorithm value.
+export const ALG = 1, KID = 4, ES256 = -7;
 
 export function mint({ privateJwk, kid, iss, url, methods = ['GET', 'HEAD'], aud, lifetime = 300, now = unixTime() }) {
   const claims = new Map([
     [ISS, iss],
     [EXP, now + lifetime],
-    [IAT, now],
-    [CTI, randomBytes(16)],
     [CATV, 1],
   ]);
   if (aud) claims.set(AUD, aud);
@@ -39,7 +37,7 @@ export function mint({ privateJwk, kid, iss, url, methods = ['GET', 'HEAD'], aud
     claims.set(CATM, methods);
   }
   const protectedHeader = new Map([
-    [ALG, algorithmFor(privateJwk)],
+    [ALG, ES256],
     [KID, Buffer.from(kid, 'utf8')],
   ]);
   return toBase64Url(encode(new Tagged(18, signCose({ protectedHeader, payload: encode(claims), privateJwk }))));
@@ -64,18 +62,10 @@ export function exactUrl(url) {
 export function signCose({ protectedHeader, unprotectedHeader = new Map(), payload, privateJwk }) {
   const protectedBytes = encode(protectedHeader);
   const toBeSigned = encode(['Signature1', protectedBytes, Buffer.alloc(0), payload]);
+  if (privateJwk.kty !== 'EC' || privateJwk.crv !== 'P-256') throw new Error('ES256 needs a P-256 key');
   const key = createPrivateKey({ key: privateJwk, format: 'jwk' });
-  const signature =
-    algorithmFor(privateJwk) === ES256
-      ? signBytes('sha256', toBeSigned, { key, dsaEncoding: 'ieee-p1363' }) // 64 bytes, r then s
-      : signBytes(null, toBeSigned, key);
+  const signature = signBytes('sha256', toBeSigned, { key, dsaEncoding: 'ieee-p1363' }); // 64 bytes, r then s
   return [protectedBytes, unprotectedHeader, payload, signature];
-}
-
-export function algorithmFor(jwk) {
-  if (jwk.kty === 'EC' && jwk.crv === 'P-256') return ES256;
-  if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') return EDDSA;
-  throw new Error('unsupported key type');
 }
 
 export function toBase64Url(bytes) {

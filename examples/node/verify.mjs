@@ -3,13 +3,14 @@
 //   import { verify } from './verify.mjs';
 //
 //   const result = verify({ method, url, keysFor });
-//   // { verified: true, iss, kid, exp, catu, catm, aud }  or  { verified: false, reason }
+//   // { verified: true, iss }  or  { verified: false, reason }
 //
 // `keysFor(iss)` returns the cached JWK Set for an issuer, or null when none is cached. It must
 // not fetch: keys are refreshed in the background, never while a request waits.
 //
-// The result is the document the self-check endpoint returns. What a host does with it is the
-// host's policy.
+// The result is the document the self-check endpoint returns. `verified` and `iss` are what
+// hosts agree on; `reason` is diagnostic, and reports the first check that failed in the order
+// this file makes them. What a host does with the result is the host's policy.
 //
 // From the command line:
 //
@@ -19,11 +20,11 @@ import { createHash, createPublicKey, verify as verifyBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { decode, encode, Tagged } from './cbor.mjs';
-import { ALG, AUD, CATM, CATU, CATV, CTI, EDDSA, ES256, EXP, IAT, ISS, KID, NBF } from './sign.mjs';
+import { ALG, AUD, CATM, CATU, CATV, CTI, ES256, EXP, IAT, ISS, KID, NBF } from './sign.mjs';
 import { components, decodeOnce, extractTokens, normalize, origin, split } from './url.mjs';
 
 const CRIT = 2;
-const MAX_LIFETIME = 86400;
+const WINDOW = 86400; // a token verifies only during the 24 hours before it expires
 const ISSUER = /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$/;
 
 class Unverified extends Error {}
@@ -49,7 +50,7 @@ function check({ method, url, keysFor, audiencesFor, now }) {
   // 1. Decode.
   const { protectedBytes, protectedHeader, unprotectedHeader, payload, signature } = decodeToken(tokens[0]);
   const alg = protectedHeader.get(ALG);
-  if (alg !== ES256 && alg !== EDDSA) fail('malformed');
+  if (alg !== ES256) fail('malformed');
   if (protectedHeader.has(CRIT)) fail('malformed'); // no extensions are understood
   for (const label of protectedHeader.keys()) if (unprotectedHeader.has(label)) fail('malformed');
   const kidBytes = protectedHeader.get(KID) ?? unprotectedHeader.get(KID);
@@ -57,15 +58,17 @@ function check({ method, url, keysFor, audiencesFor, now }) {
   const kid = text(kidBytes);
   const claims = decodeMap(payload);
 
-  // 2. Claims.
+  // 2. Claims: iss, exp and catv are required; the rest are checked when present.
   const iss = claims.get(ISS);
   const exp = claims.get(EXP);
+  if (typeof iss !== 'string' || !ISSUER.test(iss) || iss.endsWith(':443')) fail('malformed');
+  if (!Number.isInteger(exp)) fail('malformed');
+  if (claims.get(CATV) !== 1) fail('malformed');
+
   const iat = claims.get(IAT);
   const cti = claims.get(CTI);
-  if (typeof iss !== 'string' || !ISSUER.test(iss) || iss.endsWith(':443')) fail('malformed');
-  if (!Number.isInteger(exp) || !Number.isInteger(iat)) fail('malformed');
-  if (!(cti instanceof Uint8Array) || cti.length < 8) fail('malformed');
-  if (claims.get(CATV) !== 1) fail('malformed');
+  if (iat !== undefined && !Number.isInteger(iat)) fail('malformed');
+  if (cti !== undefined && !(cti instanceof Uint8Array)) fail('malformed');
 
   const nbf = claims.get(NBF);
   const aud = claims.get(AUD);
@@ -76,19 +79,18 @@ function check({ method, url, keysFor, audiencesFor, now }) {
   if (catu !== undefined && !isUrlRestriction(catu)) fail('malformed');
   if (catm !== undefined && !(Array.isArray(catm) && catm.length && catm.every((m) => typeof m === 'string'))) fail('malformed');
 
-  if (!(iat < exp && exp <= iat + MAX_LIFETIME)) fail('malformed');
-
   // 3. Time, with no leeway.
   if (!(now < exp)) fail('expired');
+  if (!(exp <= now + WINDOW)) fail('not_yet_valid');
   if (nbf !== undefined && !(nbf <= now)) fail('not_yet_valid');
 
   // 4. The key, looked up only under the token's own issuer.
-  const jwk = (keysFor(iss)?.keys ?? []).find((k) => k.kid === kid && usable(k, alg));
+  const jwk = (keysFor(iss)?.keys ?? []).find((k) => k.kid === kid && usable(k));
   if (!jwk) fail('key_unavailable');
 
   // 5. Signature.
   const toBeVerified = encode(['Signature1', protectedBytes, Buffer.alloc(0), payload]);
-  if (!signatureValid(alg, jwk, toBeVerified, signature)) fail('bad_signature');
+  if (!signatureValid(jwk, toBeVerified, signature)) fail('bad_signature');
 
   // 6. Restrictions, against the request as received.
   if (catu !== undefined) {
@@ -102,15 +104,7 @@ function check({ method, url, keysFor, audiencesFor, now }) {
   if (catm !== undefined && !catm.includes(method)) fail('method_mismatch');
   if (aud !== undefined && aud !== origin(url) && !audiencesFor(iss).includes(aud)) fail('audience_mismatch');
 
-  return {
-    verified: true,
-    iss,
-    kid,
-    exp,
-    catu: catu === undefined ? null : true,
-    catm: catm === undefined ? null : true,
-    aud: aud === undefined ? null : true,
-  };
+  return { verified: true, iss };
 }
 
 // base64url (padding optional) → CBOR → COSE_Sign1, untagged, tagged 18, or tagged 61 around 18.
@@ -152,25 +146,21 @@ function text(bytes) {
   }
 }
 
-// A published key that does not fit the token's algorithm is treated as absent.
-function usable(jwk, alg) {
-  const [kty, crv, name] = alg === ES256 ? ['EC', 'P-256', 'ES256'] : ['OKP', 'Ed25519', 'EdDSA'];
+// A published key that is not an ES256 signing key is treated as absent.
+function usable(jwk) {
   return (
-    jwk.kty === kty &&
-    jwk.crv === crv &&
+    jwk.kty === 'EC' &&
+    jwk.crv === 'P-256' &&
     jwk.use === 'sig' &&
-    (jwk.alg === undefined || jwk.alg === name) &&
+    (jwk.alg === undefined || jwk.alg === 'ES256') &&
     (jwk.key_ops === undefined || jwk.key_ops.includes('verify'))
   );
 }
 
-function signatureValid(alg, jwk, data, signature) {
+function signatureValid(jwk, data, signature) {
   try {
     const key = createPublicKey({ key: jwk, format: 'jwk' });
-    if (alg === ES256) {
-      return signature.length === 64 && verifyBytes('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature);
-    }
-    return verifyBytes(null, data, key, signature);
+    return signature.length === 64 && verifyBytes('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, signature);
   } catch {
     return false;
   }
@@ -192,8 +182,9 @@ function urlMatches(catu, parts) {
   return true;
 }
 
-// Exact, prefix, suffix, contains and SHA-256. A match type this verifier does not support
-// (regular expression, SHA-512/256) fails the match, as CTA-5007-B requires.
+// Exact is the match every host supports. This verifier also handles prefix, suffix, contains
+// and SHA-256. A match type a verifier does not support (here: regular expression, SHA-512/256)
+// fails the match.
 function componentMatches(type, expected, actual) {
   if (type === -1) {
     return expected instanceof Uint8Array && createHash('sha256').update(actual).digest().equals(Buffer.from(expected));

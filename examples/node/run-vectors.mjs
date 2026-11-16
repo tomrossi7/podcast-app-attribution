@@ -4,7 +4,6 @@
 //   node examples/node/run-vectors.mjs per-request expired
 
 import { readFileSync } from 'node:fs';
-import { isDeepStrictEqual } from 'node:util';
 import { verify } from './verify.mjs';
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../../test-vectors/${name}`, import.meta.url), 'utf8'));
@@ -28,9 +27,15 @@ for (const v of vectors) {
     keysFor: (iss) => (iss === suite.issuer ? keys : null),
     audiencesFor: () => v.accepted_audiences ?? [],
   });
-  const ok = isDeepStrictEqual(actual, v.expected);
+  // Whether the request is verified, and as whom, is what has to match. The reason is diagnostic.
+  const ok = actual.verified === v.expected.verified && actual.iss === v.expected.iss;
   if (!ok) failures++;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${v.name}${ok ? '' : `\n     expected ${JSON.stringify(v.expected)}\n     actual   ${JSON.stringify(actual)}`}`);
+  const detail = !ok
+    ? `\n     expected ${JSON.stringify(v.expected)}\n     actual   ${JSON.stringify(actual)}`
+    : actual.reason !== v.expected.reason
+      ? `  (reason: ${actual.reason}; the vector suggests ${v.expected.reason})`
+      : '';
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${v.name}${detail}`);
 }
 console.log(`\n${vectors.length - failures} of ${vectors.length} passed`);
 process.exit(failures ? 1 : 0);

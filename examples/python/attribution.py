@@ -4,8 +4,10 @@
     requests.get(attach(url, token))
 
     result = verify(url, keys_for=cached_key_set)
-    # {"verified": True, "iss": ..., "kid": ..., "exp": ..., "catu": ..., "catm": ..., "aud": ...}
-    # or {"verified": False, "reason": ...}
+    # {"verified": True, "iss": ...} or {"verified": False, "reason": ...}
+
+"verified" and "iss" are what hosts agree on. "reason" is diagnostic, and reports the first check
+that failed in the order this file makes them.
 
 `keys_for(iss)` returns the cached JWK Set for an issuer, or None when none is cached. It must not
 fetch: keys are refreshed in the background, never while a request waits.
@@ -13,7 +15,6 @@ fetch: keys are refreshed in the background, never while a request waits.
 
 import base64
 import hashlib
-import os
 import re
 import time
 from collections.abc import Mapping
@@ -22,15 +23,15 @@ from urllib.parse import unquote
 import cbor2
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
 # CWT and CAT claim labels (IANA CWT Claims registry).
 ISS, AUD, EXP, NBF, IAT, CTI, CATV, CATU, CATM = 1, 3, 4, 5, 6, 7, 310, 312, 313
-# COSE header labels and algorithm values.
-ALG, CRIT, KID, ES256, EDDSA = 1, 2, 4, -7, -8
+# COSE header labels and the ES256 algorithm value.
+ALG, CRIT, KID, ES256 = 1, 2, 4, -7
 
-MAX_LIFETIME = 86400
+WINDOW = 86400  # a token verifies only during the 24 hours before it expires
 ISSUER = re.compile(r"https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?")
 
 
@@ -40,7 +41,7 @@ ISSUER = re.compile(r"https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]
 def mint(private_jwk, kid, iss, url=None, methods=("GET", "HEAD"), aud=None, lifetime=300, now=None):
     """A per-request token when `url` is given, otherwise a session token."""
     now = int(time.time()) if now is None else now
-    claims = {ISS: iss, EXP: now + lifetime, IAT: now, CTI: os.urandom(16), CATV: 1}
+    claims = {ISS: iss, EXP: now + lifetime, CATV: 1}
     if aud:
         claims[AUD] = aud
     if url:
@@ -96,7 +97,7 @@ def _check(url, keys_for, method, audiences_for, now):
     # 1. Decode.
     protected_bytes, protected, unprotected, payload, signature = _decode_token(tokens[0])
     alg = protected.get(ALG)
-    if alg not in (ES256, EDDSA) or CRIT in protected or protected.keys() & unprotected.keys():
+    if type(alg) is not int or alg != ES256 or CRIT in protected or protected.keys() & unprotected.keys():
         raise Unverified("malformed")
     kid = protected.get(KID, unprotected.get(KID))
     if type(kid) is not bytes:
@@ -107,7 +108,7 @@ def _check(url, keys_for, method, audiences_for, now):
         raise Unverified("malformed")
     claims = _decode_map(payload)
 
-    # 2. Claims.
+    # 2. Claims: iss, exp and catv are required; the rest are checked when present.
     iss, exp, iat, cti = claims.get(ISS), claims.get(EXP), claims.get(IAT), claims.get(CTI)
     nbf, aud, catu, catm = claims.get(NBF), claims.get(AUD), claims.get(CATU), claims.get(CATM)
     well_formed = (
@@ -115,16 +116,14 @@ def _check(url, keys_for, method, audiences_for, now):
         and ISSUER.fullmatch(iss)
         and not iss.endswith(":443")
         and type(exp) is int
-        and type(iat) is int
-        and type(cti) is bytes
-        and len(cti) >= 8
         and type(claims.get(CATV)) is int
         and claims[CATV] == 1
+        and (iat is None or type(iat) is int)
+        and (cti is None or type(cti) is bytes)
         and (nbf is None or type(nbf) is int)
         and (aud is None or type(aud) is str)
         and (catu is None or _is_url_restriction(catu))
         and (catm is None or (_is_array(catm) and catm and all(type(m) is str for m in catm)))
-        and iat < exp <= iat + MAX_LIFETIME
     )
     if not well_formed:
         raise Unverified("malformed")
@@ -132,17 +131,19 @@ def _check(url, keys_for, method, audiences_for, now):
     # 3. Time, with no leeway.
     if not now < exp:
         raise Unverified("expired")
+    if not exp <= now + WINDOW:
+        raise Unverified("not_yet_valid")
     if nbf is not None and not nbf <= now:
         raise Unverified("not_yet_valid")
 
     # 4. The key, looked up only under the token's own issuer.
     key_set = keys_for(iss) or {"keys": []}
-    jwk = next((k for k in key_set["keys"] if k.get("kid") == kid and _usable(k, alg)), None)
+    jwk = next((k for k in key_set["keys"] if k.get("kid") == kid and _usable(k)), None)
     if jwk is None:
         raise Unverified("key_unavailable")
 
     # 5. Signature.
-    if not _signature_valid(alg, jwk, _to_be_signed(protected_bytes, payload), signature):
+    if not _signature_valid(jwk, _to_be_signed(protected_bytes, payload), signature):
         raise Unverified("bad_signature")
 
     # 6. Restrictions, against the request as received.
@@ -158,16 +159,7 @@ def _check(url, keys_for, method, audiences_for, now):
     if aud is not None and aud != origin(url) and aud not in audiences_for(iss):
         raise Unverified("audience_mismatch")
 
-    restriction = lambda claim: None if claim is None else True
-    return {
-        "verified": True,
-        "iss": iss,
-        "kid": kid,
-        "exp": exp,
-        "catu": restriction(catu),
-        "catm": restriction(catm),
-        "aud": restriction(aud),
-    }
+    return {"verified": True, "iss": iss}
 
 
 def _decode_token(value):
@@ -225,28 +217,24 @@ def _to_be_signed(protected_bytes, payload):
     return cbor2.dumps(["Signature1", protected_bytes, b"", payload])
 
 
-def _usable(jwk, alg):
-    """A published key that does not fit the token's algorithm is treated as absent."""
-    kty, crv, name = ("EC", "P-256", "ES256") if alg == ES256 else ("OKP", "Ed25519", "EdDSA")
+def _usable(jwk):
+    """A published key that is not an ES256 signing key is treated as absent."""
     return (
-        jwk.get("kty") == kty
-        and jwk.get("crv") == crv
+        jwk.get("kty") == "EC"
+        and jwk.get("crv") == "P-256"
         and jwk.get("use") == "sig"
-        and jwk.get("alg", name) == name
+        and jwk.get("alg", "ES256") == "ES256"
         and "verify" in jwk.get("key_ops", ["verify"])
     )
 
 
-def _signature_valid(alg, jwk, data, signature):
+def _signature_valid(jwk, data, signature):
     try:
-        if alg == ES256:
-            if len(signature) != 64:
-                return False
-            numbers = ec.EllipticCurvePublicNumbers(_b64int(jwk["x"]), _b64int(jwk["y"]), ec.SECP256R1())
-            der = encode_dss_signature(int.from_bytes(signature[:32], "big"), int.from_bytes(signature[32:], "big"))
-            numbers.public_key().verify(der, data, ec.ECDSA(hashes.SHA256()))
-        else:
-            ed25519.Ed25519PublicKey.from_public_bytes(_b64(jwk["x"])).verify(signature, data)
+        if len(signature) != 64:
+            return False
+        numbers = ec.EllipticCurvePublicNumbers(_b64int(jwk["x"]), _b64int(jwk["y"]), ec.SECP256R1())
+        der = encode_dss_signature(int.from_bytes(signature[:32], "big"), int.from_bytes(signature[32:], "big"))
+        numbers.public_key().verify(der, data, ec.ECDSA(hashes.SHA256()))
         return True
     except (InvalidSignature, ValueError, KeyError):
         return False
@@ -276,7 +264,8 @@ def _url_matches(catu, parts):
 
 
 def _component_matches(kind, expected, actual):
-    """Exact, prefix, suffix, contains and SHA-256. Unsupported match types fail the match."""
+    """Exact is the match every host supports; this also handles prefix, suffix, contains and
+    SHA-256. A match type a verifier does not support fails the match."""
     if kind == -1:
         return type(expected) is bytes and hashlib.sha256(actual.encode()).digest() == expected
     if type(expected) is not str:

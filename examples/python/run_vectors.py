@@ -30,17 +30,18 @@ for v in suite["vectors"]:
         now=v["now"],
         audiences_for=lambda iss: v.get("accepted_audiences", []),
     )
-    ok = actual == v["expected"]
+    # Whether the request is verified, and as whom, is what has to match. The reason is diagnostic.
+    ok = (actual["verified"], actual.get("iss")) == (v["expected"]["verified"], v["expected"].get("iss"))
     failures += not ok
     print(f"{'ok  ' if ok else 'FAIL'} {v['name']}")
     if not ok:
         print(f"     expected {json.dumps(v['expected'])}\n     actual   {json.dumps(actual)}")
 
 # A token minted here must verify here too.
-private = next(k for k in json.loads((vectors_dir / "private-keys.json").read_text())["keys"] if k["kty"] == "EC")
+private = next(k for k in json.loads((vectors_dir / "private-keys.json").read_text())["keys"] if k["use"] == "sig")
 url = "https://host.example/show/episode.mp3?id=42"
 minted = verify(attach(url, mint(private, private["kid"], suite["issuer"], url=url)), keys_for)
-ok = minted["verified"] and minted["catu"] and minted["catm"]
+ok = minted == {"verified": True, "iss": suite["issuer"]}
 failures += not ok
 print(f"{'ok  ' if ok else 'FAIL'} (minted here) {'' if ok else json.dumps(minted)}")
 

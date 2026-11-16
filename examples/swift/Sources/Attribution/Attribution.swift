@@ -20,7 +20,7 @@ import Crypto // swift-crypto: the same API where CryptoKit is not available
 
 public enum Attribution {
     // CWT and CAT claim labels (IANA CWT Claims registry).
-    static let iss = 1, aud = 3, exp = 4, iat = 6, cti = 7, catv = 310, catu = 312, catm = 313
+    static let iss = 1, aud = 3, exp = 4, catv = 310, catu = 312, catm = 313
     // COSE header labels and the ES256 algorithm value.
     static let alg = 1, kid = 4, es256 = -7
 
@@ -34,14 +34,9 @@ public enum Attribution {
         lifetime: Int = 300,
         now: Int = Int(Date().timeIntervalSince1970)
     ) throws -> String {
-        var generator = SystemRandomNumberGenerator() // cryptographically secure
-        let tokenID = Data((0..<16).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
-
         var claims: [(CBOR, CBOR)] = [
             (.int(Self.iss), .text(iss)),
             (.int(Self.exp), .int(now + lifetime)),
-            (.int(Self.iat), .int(now)),
-            (.int(Self.cti), .bytes(tokenID)),
             (.int(Self.catv), .int(1)),
         ]
         if let aud { claims.append((.int(Self.aud), .text(aud))) }

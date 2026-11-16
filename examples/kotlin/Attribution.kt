@@ -16,7 +16,6 @@ import java.math.BigInteger
 import java.security.AlgorithmParameters
 import java.security.KeyFactory
 import java.security.PrivateKey
-import java.security.SecureRandom
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
@@ -28,8 +27,6 @@ object Attribution {
     private const val ISS = 1
     private const val AUD = 3
     private const val EXP = 4
-    private const val IAT = 6
-    private const val CTI = 7
     private const val CATV = 310
     private const val CATU = 312
     private const val CATM = 313
@@ -52,8 +49,6 @@ object Attribution {
         val claims = linkedMapOf<Any, Any>(
             ISS to iss,
             EXP to now + lifetime,
-            IAT to now,
-            CTI to ByteArray(16).also { SecureRandom().nextBytes(it) },
             CATV to 1,
         )
         if (aud != null) claims[AUD] = aud

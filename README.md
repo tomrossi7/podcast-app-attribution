@@ -53,13 +53,13 @@ signed with key 2026-11
 https://host.example/show/episode.mp3?CAT=0oRMogEmBEcyMDI2LTEx…
 ```
 
-**4. The host verifies it.** The host has already fetched ExamplePlayer's key file in the background. It checks the signature, the expiry and the URL, and the result is a verified issuer:
+**4. The host verifies it.** The host checks the signature against ExamplePlayer's key file, and checks the expiry and the URL. The result is a verified issuer:
 
 ```
 verified issuer: https://exampleplayer.com
 ```
 
-A request with no token, or with one that fails, is simply unverified.
+A request with no token, or with one that fails, is simply unverified. So are the first requests from an app the host has never seen: the host fetches the key file in the background, not while a listener waits, and verifies the requests that come after.
 
 To run those four steps yourself with the sample keys in this repository (Node 18 or later, nothing to install):
 
