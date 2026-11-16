@@ -1,12 +1,14 @@
-// Minting a Verified App Attribution token in Swift. CryptoKit only; drop this file into an app.
+// Minting a Verified App Attribution token in Swift. CryptoKit only, in one file.
 //
 //     let token = try Attribution.mint(key: key, kid: "2026-11", iss: "https://exampleplayer.com", url: url)
 //     let request = URLRequest(url: URL(string: Attribution.attach(token, to: url))!)
 //
 // Leave `url` out for a session token that can be attached to any request until it expires.
 //
-// Where the key lives is up to you. The specification asks that signing keys be protected from
-// extraction; minting on infrastructure you control and handing the token to the app is one way.
+// This is a demonstration of how a token is built, not a production design. A signing key
+// shipped inside an app can be extracted, and then anyone can sign as that app. Minting on a
+// server you control and handing the token to the app avoids that. See "Protecting the key" in
+// the specification for the trade-offs.
 
 import Foundation
 

@@ -1,53 +1,49 @@
 # Examples
 
-Small implementations, written to be read.
+Start with Node. It is the reference implementation: it mints and verifies, has no dependencies, and generates the test vectors. The other languages are optional and are here for people who work in them.
 
-| | Mint (application side) | Verify (host side) |
-|---|---|---|
-| [Swift](#swift) | ✓ | |
-| [Kotlin](#kotlin) | ✓ | |
-| [Node](#node) | ✓ | ✓ |
-| [Ruby](#ruby) | ✓ | ✓ |
-| [Python](#python) | ✓ | ✓ |
+## Getting started
 
-Every verifier passes every [test vector](../test-vectors/), and tokens minted by each example verify with the others.
+Node 18 or later, nothing to install. From the repository root:
+
+```sh
+# Mint a token with the sample key and print the URL to request
+node examples/node/sign.mjs test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
+  'https://host.example/show/episode.mp3?id=42'
+
+# Verify that URL against the sample key set
+node examples/node/verify.mjs test-vectors/keys.json https://exampleplayer.com '<the URL printed above>'
+```
+
+The second command prints the result, with the verified issuer in `iss`:
+
+```json
+{ "verified": true, "iss": "https://exampleplayer.com", "kid": "2026-11", "exp": 1800000300, "catu": true, "catm": true, "aud": null }
+```
+
+(`exp` will be five minutes from when you ran it.)
+
+Change a character of the path and run it again: `{ "verified": false, "reason": "url_mismatch" }`.
+
+Then run the [test vectors](../test-vectors/):
+
+```sh
+node examples/node/run-vectors.mjs
+```
+
+## What is here
+
+| | Mint (application side) | Verify (host side) | |
+|---|---|---|---|
+| [Node](#node) | ✓ | ✓ | Reference implementation |
+| [Ruby](#ruby) | ✓ | ✓ | Optional |
+| [Python](#python) | ✓ | ✓ | Optional |
+| [Swift](#swift-and-kotlin) | ✓ | | Optional, demonstration |
+| [Kotlin](#swift-and-kotlin) | ✓ | | Optional, demonstration |
+
+Every verifier passes every test vector, and tokens minted by each example verify with the others.
 
 None of them fetches or caches keys; a real host does that in the background, as the [specification](../SPEC.md#publishing-keys) describes.
-
-## Swift
-
-For iOS and macOS apps. CryptoKit only: [`Attribution.swift`](swift/Sources/Attribution/Attribution.swift) is one file to drop into an app.
-
-```swift
-let token = try Attribution.mint(key: key, kid: "2026-11", iss: "https://exampleplayer.com", url: url)
-let asset = AVURLAsset(url: URL(string: Attribution.attach(token, to: url))!)
-```
-
-The package around it exists so the example can be built and run from the command line, including on Linux, where [swift-crypto](https://github.com/apple/swift-crypto) stands in for CryptoKit:
-
-```sh
-cd examples/swift
-swift run mint ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
-  'https://host.example/show/episode.mp3?id=42'
-```
-
-## Kotlin
-
-For Android (API 26 or later) and the JVM. JDK classes only: [`Attribution.kt`](kotlin/Attribution.kt) is one file to drop into an app.
-
-```kotlin
-val token = Attribution.mint(key, kid = "2026-11", iss = "https://exampleplayer.com", url = url)
-val request = Request.Builder().url(Attribution.attach(url, token)).build()
-```
-
-```sh
-cd examples/kotlin
-kotlinc Attribution.kt Main.kt -include-runtime -d attribution.jar
-java -jar attribution.jar ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
-  'https://host.example/show/episode.mp3?id=42'
-```
-
-Both mobile examples sign with ES256 and take the key as a parameter. Where that key lives is the application's decision; see [Protecting the key](../SPEC.md#protecting-the-key).
 
 ## Node
 
@@ -59,18 +55,6 @@ No dependencies. Node 18 or later. Every byte of the encoding is visible, which 
 | [`node/verify.mjs`](node/verify.mjs) | `verify()`: the six verification steps, in order. Returns the self-check document. |
 | [`node/url.mjs`](node/url.mjs) | Attaching and finding the `CAT` parameter, URL normalization, `catu` components. |
 | [`node/cbor.mjs`](node/cbor.mjs) | A strict, deterministic CBOR encoder and decoder for the handful of types a token uses. |
-
-```sh
-# Mint a per-request token with the sample key and print the URL to request
-node examples/node/sign.mjs test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
-  'https://host.example/show/episode.mp3?id=42'
-
-# Verify a request URL against a key set
-node examples/node/verify.mjs test-vectors/keys.json https://exampleplayer.com '<url>'
-
-# Run the test vectors
-node examples/node/run-vectors.mjs
-```
 
 ## Ruby
 
@@ -99,6 +83,45 @@ uv run examples/python/run_vectors.py
 ```
 
 `mint()` here signs with ES256 only; `verify()` accepts ES256 and EdDSA.
+
+## Swift and Kotlin
+
+These show how a token is built and signed in the languages mobile apps are written in. They sign with ES256 and take the key as a parameter.
+
+**They are demonstrations, not a production design.** A signing key shipped inside an app can be extracted, and then anyone can sign as that app. Minting tokens on a server you control and handing them to the app avoids that, and the app-side code shrinks to appending the token to the URL. Neither arrangement is required; [Protecting the key](../SPEC.md#protecting-the-key) sets out the trade-offs.
+
+### Swift
+
+For iOS and macOS apps. CryptoKit only, in a single file: [`Attribution.swift`](swift/Sources/Attribution/Attribution.swift).
+
+```swift
+let token = try Attribution.mint(key: key, kid: "2026-11", iss: "https://exampleplayer.com", url: url)
+let asset = AVURLAsset(url: URL(string: Attribution.attach(token, to: url))!)
+```
+
+The package around it exists so the example can be built and run from the command line, including on Linux, where [swift-crypto](https://github.com/apple/swift-crypto) stands in for CryptoKit:
+
+```sh
+cd examples/swift
+swift run mint ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
+  'https://host.example/show/episode.mp3?id=42'
+```
+
+### Kotlin
+
+For Android (API 26 or later) and the JVM. JDK classes only, in a single file: [`Attribution.kt`](kotlin/Attribution.kt).
+
+```kotlin
+val token = Attribution.mint(key, kid = "2026-11", iss = "https://exampleplayer.com", url = url)
+val request = Request.Builder().url(Attribution.attach(url, token)).build()
+```
+
+```sh
+cd examples/kotlin
+kotlinc Attribution.kt Main.kt -include-runtime -d attribution.jar
+java -jar attribution.jar ../../test-vectors/private-keys.json 2026-11 https://exampleplayer.com \
+  'https://host.example/show/episode.mp3?id=42'
+```
 
 ## Notes for implementers
 

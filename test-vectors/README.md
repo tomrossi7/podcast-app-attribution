@@ -1,6 +1,32 @@
 # Test vectors
 
-Requests carrying tokens, and what a conforming verifier reports for each. Run your implementation against them before trusting it.
+Requests carrying tokens, and what a conforming verifier reports for each.
+
+## Start with these five
+
+If you are writing a verifier, get these right first. Each is one entry in [`vectors.json`](vectors.json), found by its `name`.
+
+| Case | Vector | A verifier reports |
+|---|---|---|
+| A valid token | `per-request` | verified, issuer `https://exampleplayer.com` |
+| An expired token | `expired` | unverified: `expired` |
+| An invalid signature | `bad-signature` | unverified: `bad_signature` |
+| The wrong URL | `url-mismatch` | unverified: `url_mismatch` |
+| An unknown issuer or key | `unknown-issuer`, `unknown-kid` | unverified: `key_unavailable` |
+
+To see them run against the reference implementation:
+
+```sh
+node examples/node/run-vectors.mjs per-request expired bad-signature url-mismatch unknown-issuer unknown-kid
+```
+
+## The full suite
+
+The other vectors are an interoperability resource for an implementation that is past those five: the encodings a verifier has to accept, the boundaries, and the malformed tokens it has to reject. Run all of them before trusting a verifier with real traffic.
+
+```sh
+node examples/node/run-vectors.mjs
+```
 
 | File | What |
 |---|---|

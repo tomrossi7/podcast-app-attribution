@@ -14,6 +14,16 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be interpreted a
 
 Hosts identify applications by user-agent string. User agents are unverifiable, often generic (`okhttp`, `Dalvik`, `CFNetwork`), and trivially spoofed, so a real application's requests are under-counted or mixed with junk, and the application has no way to object. A signed request gives a host a verified issuer to attribute to, and gives the application a cryptographically verifiable attribution signal that nobody else can forge without its signing key.
 
+### What a verified request means
+
+A verified request carried a token that was valid when the request arrived and was signed with a key published for the issuer's domain. Nothing more is established.
+
+- It does not establish that the issuer's application sent the request. A token is a bearer credential: whoever obtains one can present it until it expires, wherever its restrictions match. Short lifetimes and URL binding narrow where and for how long a copied token works. They do not remove the possibility.
+- It does not establish that a person listened.
+- It is only as strong as the issuer's control of its signing key ([Protecting the key](#protecting-the-key)).
+
+How much weight the signal carries is the host's decision.
+
 ## Overview
 
 Two parties: the **application** (a podcast player) and the **host** (whoever serves the episode URL). The application is the **issuer** of the token; its identity is its web origin, such as `https://exampleplayer.com`.
@@ -125,6 +135,14 @@ Verification happens when the host receives a request. Expiry during a transfer 
 
 Implementations SHOULD protect private signing keys from distribution or extraction. Minting tokens on infrastructure controlled by the application publisher is one recommended approach. A minting service SHOULD be able to issue session tokens without being told the episode URL or anything about the listener, and obtaining a token SHOULD NOT delay the media request.
 
+No arrangement is required. The rest of this section is not normative; it describes what each choice is worth.
+
+- **A key inside the application.** No server is needed, and each request can have its own URL-bound token. But a key shipped in an application can be extracted, and from then on anyone can sign as the application. Rotation is the only remedy, and it is slow: a new key reaches listeners only as they update, and removing the old key stops every older version from verifying. The token's times also come from the device's clock, which hosts check without leeway, so a device with a wrong clock mints tokens that fail. This asks more of an imitator than copying a user-agent string, and it is the weakest arrangement.
+- **A minting service.** The key stays on the publisher's infrastructure and the application fetches tokens from it. The key cannot be extracted and the clock is the server's. The question moves to who may ask for a token. An open endpoint hands one to any caller, though the publisher can at least rate-limit it, watch it and shut off abuse, none of which is possible for a user-agent string. Platform attestation or an account check narrows it further. This need not be much infrastructure: a single serverless function is enough.
+- **What the service mints.** A token per request tells the service every URL the listener plays and puts a round trip before each one. A session token fetched ahead of time avoids both, which is what the requirements above ask for, at the price of being replayable to any host until it expires. A token whose `catu` names only the host sits between the two: the service learns the hostname and nothing else, and the token does not match at any other host.
+
+The mobile [examples](examples/) sign inside the application because that is the shortest way to show how a token is built. They are demonstrations of the format, not a recommended production design.
+
 ## Publishing keys
 
 Unless a host has configured another location for the issuer (below), the application MUST serve a JWK Set (RFC 7517: a JSON object with a `keys` array of public-key objects) over HTTPS at a fixed path under its `iss` origin:
@@ -200,6 +218,17 @@ where each restriction field is `true` when present and matched, `null` when abs
 
 using a reason from [Verification](#verification). The check evaluates `catu`, `catm` and `aud` against the self-check request itself. An otherwise valid token bound to an episode URL therefore reports `url_mismatch`, which says nothing about its signature; an earlier failure (`expired`, `bad_signature`) is reported instead when it occurs first. To test a per-request token end to end, the issuer needs to be able to mint one bound to the self-check URL.
 
+## Deployment considerations
+
+This section is not normative. It records how the query parameter meets real podcast delivery, including the parts Draft 0.1 does not solve.
+
+- **Redirects.** The token goes to the server named in the enclosure URL, which is the first hop. Many enclosure URLs redirect, through a measurement prefix or from the host to its CDN. What reaches a later hop depends on whether each redirecting server copies the query string. A session token that is forwarded can still verify there. A URL-bound token cannot, because it is bound to the first URL, and reports `url_mismatch`. In practice the server at the enclosure URL is the one that can verify, and a host that sits behind a third party's prefix may receive nothing usable.
+- **Caching.** Every token makes a different URL. A CDN that includes the whole query string in its cache key, which is the default on several, treats each tokened request as a new object and fetches it from the origin again. A host that verifies tokens needs to leave `CAT` out of the cache key. A host that does not verify them pays that cost for nothing, and Draft 0.1 gives an application no way to tell the two apart (see [Open questions](#open-questions)). Until it does, applications are better off sending tokens to hosts they know verify them than to every host.
+- **URLs that are already signed.** Some enclosure URLs carry a signature of their own that covers the query string, and reject any added parameter. This is why [Attaching the token](#attaching-the-token) asks applications to be able to turn attribution off per origin.
+- **Logs and forwarded URLs.** A token in a URL is written wherever URLs are written: access logs at every hop, CDN logs, and anything downstream that stores request URLs. Anyone who can read it can replay it until it expires, within its restrictions. Short lifetimes are the main defence. A host can also drop the `CAT` value from logs it keeps, and leave it out of the redirects it issues.
+- **Range requests and long sessions.** A player fetches one episode with many requests, and each is verified by itself. A player that fixes the URL when playback starts keeps sending the same token, so requests made after it expires report `expired` while earlier ones verified. One play can therefore be partly verified, and how a host attributes it is the host's policy. An application that can sign each request should. One that cannot may prefer a lifetime that covers a typical session, within the 24-hour limit.
+- **Where verification happens.** Nothing requires it to happen in the request path. A host can verify at its edge, at its origin, or afterwards from request logs, as long as it uses the time the request arrived.
+
 ## Security considerations
 
 - **Replay.** A token can be replayed until it expires wherever its restrictions match: `catu` limits the URLs, `catm` the methods, `aud` the recipient. A session token without `aud` or `catu` can be replayed to any host. `cti` identifies a token but does not prevent replay. Short expiries limit the window. This is acceptable for an attribution signal; it would not be for access control.
@@ -210,3 +239,5 @@ using a reason from [Verification](#verification). The check evaluates `catu`, `
 
 - Whether `aud` should become required.
 - Whether hosts should strip `CAT` before redirecting to media on a third-party CDN, so the token never reaches another party's logs.
+- How an application learns which hosts verify tokens, so that it does not send them to hosts that do not. The self-check endpoint could double as that signal.
+- Whether an application should sign each hop of a redirect chain, where its HTTP client allows that.
